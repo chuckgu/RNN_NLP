@@ -3,7 +3,7 @@ import theano,os
 import numpy as np
 import matplotlib.pyplot as plt
 from Layers import hidden,lstm,gru,BiDirectionLSTM,decoder,BiDirectionGRU
-from Models import ENC_DEC
+from Model_NMT import ENC_DEC
 from preprocess import prepare_data,load_data,load_dict
 
 #theano.config.exception_verbosity='high'

@@ -3,7 +3,7 @@ import theano,os
 import numpy as np
 import matplotlib.pyplot as plt
 from Layers import hidden,lstm,gru,BiDirectionLSTM,decoder,BiDirectionGRU
-from Models_RNN import RNN
+from Model_RNN import RNN
 from preprocess import load_data,prepare_full_data
 
 
