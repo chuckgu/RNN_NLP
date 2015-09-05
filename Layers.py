@@ -8,29 +8,28 @@ from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 SEED = 123
 np.random.seed(SEED)
 
-def dropout_layer(state_before, use_noise, trng):
+def dropout_layer(state_before, use_noise, trng,pr=0.5):
     proj = T.switch(use_noise,
                          (state_before *
                           trng.binomial(state_before.shape,
-                                        p=0.5, n=1,
+                                        p=pr, n=1,
                                         dtype=state_before.dtype)),
-                         state_before * 0.5)
+                         state_before * pr)
     return proj
 
 
 class drop_out(object):
-    def __init__(self,use_dropout):
+    def __init__(self,use_dropout,pr=0.5):
         self.input= T.tensor3()
         self.x_mask=T.matrix()   
         self.use_noise = theano.shared(numpy_floatX(0.))
         self.trng = RandomStreams(SEED)
         self.params=[]
-        
+        self.use_dropout=use_dropout
         self.L1=0
         self.L2_sqr=0
+        self.pr=pr
         
-        if use_dropout is True: self.use_noise.set_value(1.)         
-
     def set_previous(self,layer):
         self.previous = layer
         self.input=self.get_input() 
@@ -42,14 +41,20 @@ class drop_out(object):
     def set_mask(self,x_mask):
         self.x_mask=x_mask
         
-    def get_input(self):
+    def get_input(self,train=False):
         if hasattr(self, 'previous'):
-            return self.previous.get_output()
+            return self.previous.get_output(train)
         else:
             return self.input    
     
-    def get_output(self):
-        return dropout_layer(self.input, self.use_noise, self.trng)
+    def get_output(self,train=False):
+        if train:
+            if self.use_dropout is True: self.use_noise.set_value(1.)    
+        else:self.use_noise.set_value(0.)
+        
+        self.input=self.get_input(train) 
+        
+        return dropout_layer(self.input, self.use_noise, self.trng,self.pr)
    
 
 class hidden(object):
@@ -86,14 +91,14 @@ class hidden(object):
     def set_mask(self,x_mask):
         self.x_mask=x_mask
         
-    def get_input(self):
+    def get_input(self,train=False):
         if hasattr(self, 'previous'):
-            return self.previous.get_output()
+            return self.previous.get_output(train)
         else:
             return self.input    
     
-    def get_output(self):
-        X=self.get_input()
+    def get_output(self,train=False):
+        X=self.get_input(train)
         X_mask=self.x_mask
         h, _ = theano.scan(self._step, 
                              sequences = [X,X_mask],
@@ -170,14 +175,14 @@ class lstm(object):
     def set_mask(self,x_mask):
         self.x_mask=x_mask
         
-    def get_input(self):
+    def get_input(self,train=False):
         if hasattr(self, 'previous'):
-            return self.previous.get_output()
+            return self.previous.get_output(train)
         else:
             return self.input    
     
-    def get_output(self):
-        X=self.get_input()
+    def get_output(self,train=False):
+        X=self.get_input(train)
         X_mask=self.x_mask        
         [h,c], _ = theano.scan(self._step, 
                              sequences = [X,X_mask],
@@ -242,14 +247,14 @@ class gru(object):
     def set_mask(self,x_mask):
         self.x_mask=x_mask
         
-    def get_input(self):
+    def get_input(self,train=False):
         if hasattr(self, 'previous'):
-            return self.previous.get_output()
+            return self.previous.get_output(train)
         else:
             return self.input    
     
-    def get_output(self):
-        X=self.get_input()
+    def get_output(self,train=False):
+        X=self.get_input(train)
         X_mask=self.x_mask
         h, _ = theano.scan(self._step, 
                              sequences = [X,X_mask],
@@ -264,7 +269,7 @@ class gru(object):
 class BiDirectionLSTM(object):
     def __init__(self,n_in,n_hidden,output_mode='concat'):
         self.n_in=int(n_in)
-        if output_mode='concat': n_hidden=int(n_hidden/2)
+        if output_mode is 'concat': n_hidden=int(n_hidden/2)
         self.n_hidden=int(n_hidden)
         self.output_mode = output_mode
         self.input= T.tensor3()
@@ -373,14 +378,14 @@ class BiDirectionLSTM(object):
     def set_mask(self,x_mask):
         self.x_mask=x_mask
         
-    def get_input(self):
+    def get_input(self,train=False):
         if hasattr(self, 'previous'):
-            return self.previous.get_output()
+            return self.previous.get_output(train)
         else:
             return self.input    
     
-    def get_forward_output(self):
-        X=self.get_input()
+    def get_forward_output(self,train=False):
+        X=self.get_input(train)
         X_mask=self.x_mask
         [h,c], _ = theano.scan(self._fstep, 
                              sequences = [X,X_mask],
@@ -391,8 +396,8 @@ class BiDirectionLSTM(object):
 
         return h
         
-    def get_backward_output(self):
-        X=self.get_input()
+    def get_backward_output(self,train=False):
+        X=self.get_input(train)
         X_mask=self.x_mask
         [h,c], _ = theano.scan(self._bstep, 
                              sequences = [X,X_mask],
@@ -405,9 +410,9 @@ class BiDirectionLSTM(object):
         return h  
 
 
-    def get_output(self):
-        forward = self.get_forward_output()
-        backward = self.get_backward_output()
+    def get_output(self,train=False):
+        forward = self.get_forward_output(train)
+        backward = self.get_backward_output(train)
         if self.output_mode is 'sum':
             return forward + backward
         elif self.output_mode is 'concat':
@@ -419,7 +424,7 @@ class BiDirectionLSTM(object):
 class BiDirectionGRU(object):
     def __init__(self,n_in,n_hidden,output_mode='concat'):
         self.n_in=int(n_in)
-        if output_mode='concat':n_hidden=int(n_hidden/2)
+        if output_mode is 'concat':n_hidden=int(n_hidden/2)
         self.n_hidden=int(n_hidden)
         self.output_mode = output_mode
         self.input= T.tensor3()
@@ -510,14 +515,14 @@ class BiDirectionGRU(object):
     def set_mask(self,x_mask):
         self.x_mask=x_mask
         
-    def get_input(self):
+    def get_input(self,train=False):
         if hasattr(self, 'previous'):
-            return self.previous.get_output()
+            return self.previous.get_output(train)
         else:
             return self.input    
     
-    def get_forward_output(self):
-        X=self.get_input()
+    def get_forward_output(self,train=False):
+        X=self.get_input(train)
         mask_x=self.x_mask
         h, _ = theano.scan(self._fstep, 
                              sequences = [X,mask_x],
@@ -526,8 +531,8 @@ class BiDirectionGRU(object):
 
         return h
         
-    def get_backward_output(self):
-        X=self.get_input()
+    def get_backward_output(self,train=False):
+        X=self.get_input(train)
         mask_x=self.x_mask
         h, _ = theano.scan(self._bstep, 
                              sequences = [X,mask_x],
@@ -538,9 +543,9 @@ class BiDirectionGRU(object):
         return h  
 
 
-    def get_output(self):
-        forward = self.get_forward_output()
-        backward = self.get_backward_output()
+    def get_output(self,train=False):
+        forward = self.get_forward_output(train)
+        backward = self.get_backward_output(train)
         if self.output_mode is 'sum':
             return forward + backward
         elif self.output_mode is 'concat':
@@ -649,9 +654,9 @@ class decoder(object):
         self.input=x
 
         
-    def get_input(self):
+    def get_input(self,train=False):
         if hasattr(self, 'previous'):
-            return self.previous.get_output()
+            return self.previous.get_output(train)
         else:
             return self.input    
 
@@ -667,8 +672,8 @@ class decoder(object):
 
         return h,logit
     
-    def get_output(self,y,y_mask,init_state):
-        X=self.get_input()  
+    def get_output(self,y,y_mask,init_state,train=False):
+        X=self.get_input(train)  
         X_mask=self.previous.x_mask
   
         ### shift 1 sequence backward

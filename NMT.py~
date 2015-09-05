@@ -4,7 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from Layers import hidden,lstm,gru,BiDirectionLSTM,decoder,BiDirectionGRU
 from Model_NMT import ENC_DEC
-from Load_data import prepare_data,load_data,load_dict
+from preprocess import prepare_data,load_data,load_dict
 
 #theano.config.exception_verbosity='high'
 
@@ -67,7 +67,7 @@ print 'Initializing model...'
 mode='tr'
 
 model = ENC_DEC(n_u,n_h,n_d,n_y,n_epochs,n_chapter,n_batch,n_gen_maxlen,n_words_x,n_words_y,dim_word,
-            momentum_switchover,lr,learning_rate_decay,snapshot_Freq,sample_Freq,val_Freq,use_dropout)
+            momentum_switchover,lr,learning_rate_decay,snapshot_Freq,sample_Freq)
 model.add(BiDirectionGRU(n_u,n_h))
 model.add(decoder(n_h,n_d,n_y))
 model.build()
@@ -80,7 +80,7 @@ if mode=='tr':
     if os.path.isfile(filepath): model.load(filepath)
     
     
-    model.train(seq,seq_mask,targets,targets_mask,worddict,verbose,optimizer)
+    model.train(seq,seq_mask,targets,targets_mask,worddict,verbose,optimizer,use_dropout)
     model.save(filepath)
     
     ##draw error graph 

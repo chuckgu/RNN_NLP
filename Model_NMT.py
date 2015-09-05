@@ -45,7 +45,8 @@ class ENC_DEC(object):
     
     def __init__(self,n_in,n_hidden,n_decoder,n_out,
                  n_epochs=400,n_chapter=100,n_batch=16,maxlen=20,n_words_x=10000,n_words_y=10000,dim_word=100,
-                 momentum_switchover=5,lr=0.001,learning_rate_decay=0.999,snapshot=100,sample_Freq=100,val_Freq=100,L1_reg=0,L2_reg=0):
+                 momentum_switchover=5,lr=0.001,learning_rate_decay=0.999,snapshot=100,sample_Freq=100,val_Freq=100,
+                 use_dropout=False,L1_reg=0,L2_reg=0):
         
         self.n_in=int(n_in)
         self.n_hidden=int(n_hidden)
@@ -87,6 +88,8 @@ class ENC_DEC(object):
         self.errors=[]
         
         #self.updates = {}
+        self.is_train=False
+        self.use_dropout=use_dropout
 
 
         self.initial_momentum=0.5
@@ -126,7 +129,14 @@ class ENC_DEC(object):
         self.params+=layer.params
         self.L1 += layer.L1
         self.L2_sqr += layer.L2_sqr
-    
+
+    def set_train(self,is_train):
+        if is_train: 
+            self.is_train=True
+            if self.use_dropout is True: self.use_noise.set_value(1.)
+        else:
+            self.is_train=False
+            self.use_noise.set_value(0.)       
 
     def set_params(self,**params):
         return
@@ -196,7 +206,7 @@ class ENC_DEC(object):
         
     
     def get_output(self,trng):
-        ctx=self.layers[-1].get_input()
+        ctx=self.layers[-1].get_input(self.is_train)
         ctx_mean = (ctx * self.x_mask[:,:,None]).sum(0) / self.x_mask.sum(0)[:,None]
         
         ctx_mean = dropout_layer(ctx_mean, self.use_noise, trng)
@@ -210,7 +220,7 @@ class ENC_DEC(object):
         
        
 
-        ctx=self.layers[-1].get_input()
+        ctx=self.layers[-1].get_input(self.is_train)
         ctx_mean = (ctx * self.x_mask[:,:,None]).sum(0) / self.x_mask.sum(0)[:,None]
         
         h = T.switch(h[0] < 0, 
@@ -231,10 +241,10 @@ class ENC_DEC(object):
                 self.layers[0].input = ndim_tensor(ndim)
                 break
 
-    def get_input(self, train=False):
+    def get_input(self):
         if not hasattr(self.layers[0], 'input'):
             self.set_input()
-        return self.layers[0].get_input()  
+        return self.layers[0].get_input(self.is_train)  
         
        
 
@@ -272,7 +282,7 @@ class ENC_DEC(object):
         self.loss = lambda y,y_mask: Loss.nll_multiclass(self.p_y_given_x,y,y_mask)
         
 
-    def train(self,X_train,X_mask,Y_train,Y_mask,worddict,verbose,optimizer,use_dropout):
+    def train(self,X_train,X_mask,Y_train,Y_mask,worddict,verbose,optimizer):
 
         train_set_x = theano.shared(np.asarray(X_train, dtype='int32'), borrow=True)
         train_set_y = theano.shared(np.asarray(Y_train, dtype='int32'), borrow=True)
@@ -340,7 +350,7 @@ class ENC_DEC(object):
         n_train = train_set_x.get_value(borrow = True).shape[1]
         n_train_batches = int(np.ceil(1.0 * n_train / self.n_batch))
         
-        if use_dropout is True: self.use_noise.set_value(1.)      
+        self.set_train(True)     
         
         while (epoch < self.n_epochs):
             epoch = epoch + 1
@@ -383,7 +393,7 @@ class ENC_DEC(object):
             
             ### generating sample.. 
             if np.mod(epoch,self.sample_Freq)==0:
-                self.use_noise.set_value(0.)
+                self.set_train(False) 
                 print 'Generating a sample...'               
                 
                 i=np.random.randint(1,n_train)
@@ -400,7 +410,7 @@ class ENC_DEC(object):
                 
                 print 'Sample: ',seq_to_text(guess[1],worddict)
                 
-                if use_dropout is True: self.use_noise.set_value(1.)
+                self.set_train(True) 
             '''
             # compute loss on validation set
             if np.mod(epoch,self.val_Freq)==0:

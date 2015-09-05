@@ -59,7 +59,7 @@ print 'Initializing model...'
 mode='tr'
 
 model = RNN(n_u,n_h,n_y,n_epochs,n_chapter,n_batch,n_gen_maxlen,n_words,dim_word,
-            momentum_switchover,lr,learning_rate_decay,snapshot_Freq,sample_Freq,val_Freq)
+            momentum_switchover,lr,learning_rate_decay,snapshot_Freq,sample_Freq,val_Freq,use_dropout)
 model.add(BiDirectionGRU(n_u,n_h))
 model.add(drop_out(use_dropout))
 model.add(lstm(n_h,n_h))
@@ -79,7 +79,7 @@ if mode=='tr':
     val,val_mask,val_targets=prepare_full_data(valid[0],valid[1],n_maxlen)
     
     
-    model.train(seq,seq_mask,targets,val,val_mask,val_targets,verbose,optimizer,use_dropout)
+    model.train(seq,seq_mask,targets,val,val_mask,val_targets,verbose,optimizer)
     model.save(filepath)
     
     ##draw error graph 

@@ -36,7 +36,8 @@ class RNN(object):
     
     def __init__(self,n_in,n_hidden,n_out,
                  n_epochs=400,n_chapter=100,n_batch=16,maxlen=20,n_words=10000,dim_word=100,
-                 momentum_switchover=5,lr=0.001,learning_rate_decay=0.999,snapshot=100,sample_Freq=100,val_Freq=100,L1_reg=0,L2_reg=0):
+                 momentum_switchover=5,lr=0.001,learning_rate_decay=0.999,snapshot=100,sample_Freq=100,
+                 val_Freq=100,use_dropout=False,L1_reg=0,L2_reg=0):
         
         self.n_in=int(n_in)
         self.n_hidden=int(n_hidden)
@@ -64,14 +65,15 @@ class RNN(object):
         
         
         self.Wemb=glorot_normal((self.n_words,self.dim_word))
-
          
         self.layers = []
         self.decoder=[]
         self.params=[]
         self.errors=[]
         
-        #self.updates = {}
+        #self.updates = {}\
+        self.is_train=False
+        self.use_dropout=use_dropout
 
         self.initial_momentum=0.5
         self.final_momentum=0.9
@@ -110,6 +112,14 @@ class RNN(object):
         self.L1 += layer.L1
         self.L2_sqr += layer.L2_sqr
     
+    def set_train(self,is_train):
+        if is_train: 
+            self.is_train=True
+            if self.use_dropout is True: self.use_noise.set_value(1.)
+        else:
+            self.is_train=False
+            self.use_noise.set_value(0.)          
+            
 
     def set_params(self,**params):
         return
@@ -180,7 +190,7 @@ class RNN(object):
     
     def get_output(self):
         
-        return self.layers[-1].get_output()
+        return self.layers[-1].get_output(self.is_train)
 
     '''    
     def get_sample(self,y,h):
@@ -207,10 +217,10 @@ class RNN(object):
                 self.layers[0].input = ndim_tensor(ndim)
                 break
 
-    def get_input(self, train=False):
+    def get_input(self):
         if not hasattr(self.layers[0], 'input'):
             self.set_input()
-        return self.layers[0].get_input()  
+        return self.layers[0].get_input(self.is_train)  
         
        
 
@@ -259,7 +269,7 @@ class RNN(object):
                                        mode = mode)
     
 
-    def train(self,X_train,X_mask,Y_train,X_val,X_val_mask,Y_val,verbose,optimizer,use_dropout):
+    def train(self,X_train,X_mask,Y_train,X_val,X_val_mask,Y_val,verbose,optimizer):
 
         train_set_x = theano.shared(np.asarray(X_train, dtype='int32'), borrow=True)
         train_set_y = theano.shared(np.asarray(Y_train, dtype='int32'), borrow=True)  
@@ -318,11 +328,12 @@ class RNN(object):
         print 'Optimizer: '+optimizer
         epoch = 0
         pre_epoch=int(len(self.errors))
+        
+        self.set_train(True)
 
         n_train = train_set_x.get_value(borrow = True).shape[1]
         n_train_batches = int(np.ceil(1.0 * n_train / self.n_batch))
-        
-        if use_dropout is True: self.use_noise.set_value(1.)        
+            
         
         while (epoch < self.n_epochs):
 
@@ -365,7 +376,8 @@ class RNN(object):
             
             ### generating sample.. 
             if np.mod(epoch,self.sample_Freq)==0:
-                self.use_noise.set_value(0.)
+                self.set_train(False)
+                
                 print 'Generating a sample...'               
                 
                 i=np.random.randint(1,n_train)
@@ -388,14 +400,14 @@ class RNN(object):
                 
                 print 'Sample: %i'%guess
                 
-                if use_dropout is True: self.use_noise.set_value(1.) 
+                self.set_train(True)
              
             # compute loss on validation set
             if np.mod(epoch,self.val_Freq)==0:
-                self.use_noise.set_value(0.)
+                self.set_train(False)
                 val_losses = compute_val_error(val_set_x,mask_val_set_x,val_set_y)
                 print ('>> Validation loss: %f'%val_losses)
-                if use_dropout is True: self.use_noise.set_value(1.)
+                self.set_train(True)
             
             if optimizer is 'SGD':
                 self.lr *= self.learning_rate_decay
