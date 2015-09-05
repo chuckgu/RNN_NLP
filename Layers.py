@@ -1,9 +1,12 @@
 import theano
 import theano.tensor as T
 import numpy as np
-from initializations import glorot_uniform,zero,alloc_zeros_matrix,glorot_normal
+from initializations import glorot_uniform,zero,alloc_zeros_matrix,glorot_normal,numpy_floatX
 import theano.typed_list
+from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 
+SEED = 123
+np.random.seed(SEED)
 
 def dropout_layer(state_before, use_noise, trng):
     proj = T.switch(use_noise,
@@ -14,6 +17,40 @@ def dropout_layer(state_before, use_noise, trng):
                          state_before * 0.5)
     return proj
 
+
+class drop_out(object):
+    def __init__(self,use_dropout):
+        self.input= T.tensor3()
+        self.x_mask=T.matrix()   
+        self.use_noise = theano.shared(numpy_floatX(0.))
+        self.trng = RandomStreams(SEED)
+        self.params=[]
+        
+        self.L1=0
+        self.L2_sqr=0
+        
+        if use_dropout is True: self.use_noise.set_value(1.)         
+
+    def set_previous(self,layer):
+        self.previous = layer
+        self.input=self.get_input() 
+        self.x_mask=self.previous.x_mask
+
+    def set_input(self,x):
+        self.input=x
+
+    def set_mask(self,x_mask):
+        self.x_mask=x_mask
+        
+    def get_input(self):
+        if hasattr(self, 'previous'):
+            return self.previous.get_output()
+        else:
+            return self.input    
+    
+    def get_output(self):
+        return dropout_layer(self.input, self.use_noise, self.trng)
+   
 
 class hidden(object):
     def __init__(self,n_in,n_hidden):
@@ -36,6 +73,7 @@ class hidden(object):
     def set_previous(self,layer):
         self.previous = layer
         self.input=self.get_input()
+        self.x_mask=self.previous.x_mask
     
     def _step(self,x_t,x_m, h_tm1):
         h=T.tanh(T.dot(h_tm1, self.W_hh) + T.dot(x_t, self.W_in) + self.bh)
@@ -110,6 +148,7 @@ class lstm(object):
     def set_previous(self,layer):
         self.previous = layer
         self.input=self.get_input()
+        self.x_mask=self.previous.x_mask
     
         
     def _step(self, x_t,x_m, h_tm1, c_tm1): 
@@ -185,6 +224,7 @@ class gru(object):
     def set_previous(self,layer):
         self.previous = layer
         self.input=self.get_input()
+        self.x_mask=self.previous.x_mask
     
     def _step(self,x_t,x_m, h_tm1):
         
@@ -224,7 +264,7 @@ class gru(object):
 class BiDirectionLSTM(object):
     def __init__(self,n_in,n_hidden,output_mode='concat'):
         self.n_in=int(n_in)
-        n_hidden=int(n_hidden/2)
+        if output_mode='concat': n_hidden=int(n_hidden/2)
         self.n_hidden=int(n_hidden)
         self.output_mode = output_mode
         self.input= T.tensor3()
@@ -379,7 +419,7 @@ class BiDirectionLSTM(object):
 class BiDirectionGRU(object):
     def __init__(self,n_in,n_hidden,output_mode='concat'):
         self.n_in=int(n_in)
-        n_hidden=int(n_hidden/2)
+        if output_mode='concat':n_hidden=int(n_hidden/2)
         self.n_hidden=int(n_hidden)
         self.output_mode = output_mode
         self.input= T.tensor3()

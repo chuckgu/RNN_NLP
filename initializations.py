@@ -3,6 +3,9 @@ import theano
 import theano.tensor as T
 import numpy as np
 
+def numpy_floatX(data):
+    return np.asarray(data, dtype='float32')
+
 def floatX(X):
     return np.asarray(X, dtype=theano.config.floatX)
 

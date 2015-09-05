@@ -6,9 +6,8 @@ import logging
 import os
 import datetime
 import cPickle as pickle
-import Loss
 from collections import OrderedDict
-from initializations import glorot_uniform,zero,alloc_zeros_matrix,norm_weight,glorot_normal,shared_scalar
+from initializations import glorot_uniform,zero,alloc_zeros_matrix,norm_weight,glorot_normal,shared_scalar,numpy_floatX
 from utils import Progbar
 from optimizers import SGD,RMSprop,Adagrad,Adadelta,Adam
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
@@ -32,10 +31,6 @@ def ndim_tensor(ndim):
         return T.tensor4()
     return T.matrix()
 
-
-def numpy_floatX(data):
-    return np.asarray(data, dtype='float32')
-    
     
 class RNN(object):
     
@@ -150,7 +145,7 @@ class RNN(object):
         self.lr=lr
         self.errors=error
 
-    def save(self, fpath='.', fname=None):
+    def save(self, fpath='temp/', fname=None):
         """ Save a pickled representation of Model state. """
         fpathstart, fpathext = os.path.splitext(fpath)
         if fpathext == '.pkl':
@@ -294,7 +289,7 @@ class RNN(object):
         
 
 
-        cost = self.loss(self.y) +self.L1_reg * self.L1
+        cost = self.loss(self.y) +self.L2_reg * self.L2_sqr
   
         updates=eval(optimizer)(self.params,cost,mom,lr)    
 
@@ -360,7 +355,7 @@ class RNN(object):
            
            
             
-            print('epoch %i, train loss %f ''lr: %f' % \
+            print('epoch %i, train loss: %f ''lr: %f' % \
                   (epoch, this_train_loss, self.lr))
                   
                   
@@ -392,14 +387,15 @@ class RNN(object):
                 print 'Truth: %i'%truth
                 
                 print 'Sample: %i'%guess
-                self.use_noise.set_value(1.)
+                
+                if use_dropout is True: self.use_noise.set_value(1.) 
              
             # compute loss on validation set
             if np.mod(epoch,self.val_Freq)==0:
                 self.use_noise.set_value(0.)
                 val_losses = compute_val_error(val_set_x,mask_val_set_x,val_set_y)
-                print ('Validation loss: %f'%val_losses)
-                self.use_noise.set_value(1.)
+                print ('>> Validation loss: %f'%val_losses)
+                if use_dropout is True: self.use_noise.set_value(1.)
             
             if optimizer is 'SGD':
                 self.lr *= self.learning_rate_decay

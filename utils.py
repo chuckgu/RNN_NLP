@@ -130,7 +130,7 @@ class Progbar(object):
     def add(self, n, values=[]):
         self.update(self.seen_so_far+n, values)
 
-def rectifier(x):
+def relu(x):
     return tensor.maximum(0., x)
 
         

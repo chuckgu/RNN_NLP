@@ -400,7 +400,7 @@ class ENC_DEC(object):
                 
                 print 'Sample: ',seq_to_text(guess[1],worddict)
                 
-                self.use_noise.set_value(1.)
+                if use_dropout is True: self.use_noise.set_value(1.)
             '''
             # compute loss on validation set
             if np.mod(epoch,self.val_Freq)==0:

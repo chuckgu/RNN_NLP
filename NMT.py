@@ -4,7 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from Layers import hidden,lstm,gru,BiDirectionLSTM,decoder,BiDirectionGRU
 from Model_NMT import ENC_DEC
-from preprocess import prepare_data,load_data,load_dict
+from Load_data import prepare_data,load_data,load_dict
 
 #theano.config.exception_verbosity='high'
 
