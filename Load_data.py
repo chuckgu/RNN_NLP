@@ -162,7 +162,10 @@ def prepare_full_data(seqs, labels, maxlen=None):
     """
     # x: a list of sentences
     lengths = [len(s) for s in seqs]
-
+    print 'max length of sentences: %i'%max(lengths)
+    print 'mean length of sentences: %i'%np.mean(lengths)
+    print '50 percentile of sentences: %i'%np.percentile(lengths,50)
+    print '75 percentile of sentences: %i'%np.percentile(lengths,75)
     if maxlen is not None:
         new_seqs = []
         new_labels = []

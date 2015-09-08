@@ -5,10 +5,11 @@ from initializations import glorot_uniform,zero,alloc_zeros_matrix,glorot_normal
 import theano.typed_list
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 
-SEED = 123
+SEED = 321
 np.random.seed(SEED)
 
 def dropout_layer(state_before, use_noise, trng,pr=0.5):
+    pr=1. - pr
     proj = T.switch(use_noise,
                          (state_before *
                           trng.binomial(state_before.shape,
@@ -115,7 +116,7 @@ class lstm(object):
         self.n_in=int(n_in)
         self.n_hidden=int(n_hidden)
         self.input= T.tensor3()
-        
+        self.x_mask=T.matrix()
         
         self.W_i = glorot_uniform((n_in,n_hidden))
         self.U_i = glorot_uniform((n_hidden,n_hidden))
@@ -198,7 +199,7 @@ class gru(object):
         self.n_in=int(n_in)
         self.n_hidden=int(n_hidden)
         self.input= T.tensor3()
-        
+        self.x_mask=T.matrix()
         
         self.W_z = glorot_uniform((n_in,n_hidden))
         self.U_z = glorot_uniform((n_hidden,n_hidden))

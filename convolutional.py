@@ -5,38 +5,52 @@ import theano
 import theano.tensor as T
 from theano.sandbox.cuda import dnn
 
-from .. import activations, initializations, regularizers, constraints
-from initializations import shared_zeros
+from initializations import glorot_uniform,zero,alloc_zeros_matrix,glorot_normal,numpy_floatX,shared_zeros
 
 
 
-class Convolution1D(Layer):
+
+class Convolution1D(object):
     def __init__(self, input_dim, nb_filter, filter_length,
-                 init='uniform', activation='linear', weights=None,
                  border_mode='valid', subsample_length=1):
 
         if border_mode not in {'valid', 'full', 'same'}:
             raise Exception('Invalid border mode for Convolution1D:', border_mode)
 
-        super(Convolution1D, self).__init__()
         self.nb_filter = nb_filter
         self.input_dim = input_dim
         self.filter_length = filter_length
         self.subsample_length = subsample_length
-        self.init = initializations.get(init)
         self.activation = activations.get(activation)
         self.subsample = (1, subsample_length)
         self.border_mode = border_mode
 
         self.input = T.tensor3()
+        self.x_mask=T.matrix()
         self.W_shape = (nb_filter, input_dim, filter_length, 1)
-        self.W = self.init(self.W_shape)
-        self.b = shared_zeros((nb_filter,))
+        self.W = glorot_uniform(self.W_shape)
+        self.b = zero((nb_filter,))
 
         self.params = [self.W, self.b]
 
+    def set_previous(self,layer):
+        self.previous = layer
+        self.input=self.get_input()
+        self.x_mask=self.previous.x_mask
 
-    def get_output(self, train):
+    def set_input(self,x):
+        self.input=x   
+
+    def set_mask(self,x_mask):
+        self.x_mask=x_mask
+        
+    def get_input(self,train=False):
+        if hasattr(self, 'previous'):
+            return self.previous.get_output(train)
+        else:
+            return self.input  
+
+    def get_output(self, train=False):
         X = self.get_input(train)
         X = T.reshape(X, (X.shape[0], X.shape[1], X.shape[2], 1)).dimshuffle(0, 2, 1, 3)
 
@@ -49,7 +63,7 @@ class Convolution1D(Layer):
             shift_x = (self.filter_length - 1) // 2
             conv_out = conv_out[:, :, shift_x:X.shape[2] + shift_x, :]
 
-        output = self.activation(conv_out + self.b.dimshuffle('x', 0, 'x', 'x'))
+        output = conv_out + self.b.dimshuffle('x', 0, 'x', 'x')
         output = T.reshape(output, (output.shape[0], output.shape[1], output.shape[2])).dimshuffle(0, 2, 1)
         return output
 

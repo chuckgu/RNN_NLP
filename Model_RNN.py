@@ -70,8 +70,8 @@ class RNN(object):
         self.decoder=[]
         self.params=[]
         self.errors=[]
+        self.val_errors=[]
         
-        #self.updates = {}\
         self.is_train=False
         self.use_dropout=use_dropout
 
@@ -130,7 +130,8 @@ class RNN(object):
         weights = [p.get_value() for p in self.params]
         lr=self.lr
         error=self.errors
-        state = (params, weights,lr,error)
+        val_error=self.val_errors
+        state = (params, weights,lr,error,val_error)
         return state
 
     def _set_weights(self, weights):
@@ -148,12 +149,13 @@ class RNN(object):
         Parameters must be in the order defined by self.params:
             W, W_in, W_out, h0, bh, by
         """
-        params, weights, lr,error = state
+        params, weights, lr,error,val_error = state
         #self.set_params(**params)
         #self.ready()
         self._set_weights(weights)
         self.lr=lr
         self.errors=error
+        self.val_errors=val_error
 
     def save(self, fpath='temp/', fname=None):
         """ Save a pickled representation of Model state. """
@@ -406,6 +408,7 @@ class RNN(object):
             if np.mod(epoch,self.val_Freq)==0:
                 self.set_train(False)
                 val_losses = compute_val_error(val_set_x,mask_val_set_x,val_set_y)
+                self.val_errors.append(val_losses)
                 print ('>> Validation loss: %f'%val_losses)
                 self.set_train(True)
             

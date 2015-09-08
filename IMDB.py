@@ -23,32 +23,35 @@ optimizer="Adam"
 
 #RMSprop,SGD,Adagrad,Adadelta,Adam
 
-snapshot_Freq=25
-sample_Freq=1000
+snapshot_Freq=20
+sample_Freq=15
 val_Freq=2
 
 
 n_sentence=100000
 n_batch=512 
 n_chapter=None ## unit of slicing corpus
-n_maxlen=50 ##max length of sentences in tokenizing
+n_maxlen=40 ##max length of sentences in tokenizing
 n_gen_maxlen=20 ## max length of generated sentences
 n_words=15000 ## max numbers of words in dictionary
-dim_word=1000  ## dimention of word embedding 
+dim_word=500  ## dimention of word embedding 
 
 n_u = dim_word
-n_h = 1000 ## number of hidden nodes in encoder
+n_h = 800 ## number of hidden nodes in encoder
 
 
 stochastic=False
 use_dropout=True
 verbose=1
 
+L1_reg=0
+L2_reg=0.0001
+
 print 'Loading data...'
 
-load_file='data/imdb_sen.pkl'
+load_file='data/imdb_sen_count.pkl'
 
-train, valid, test = load_data(load_file,n_words=n_words, valid_portion=0.002,
+train, valid, test = load_data(load_file,n_words=n_words, valid_portion=0.004,
                                maxlen=None)
 n_y = np.max((np.max(train[1]),np.max(valid[1]),np.max(test[1]))) + 1
 
@@ -59,12 +62,17 @@ print 'Initializing model...'
 mode='tr'
 
 model = RNN(n_u,n_h,n_y,n_epochs,n_chapter,n_batch,n_gen_maxlen,n_words,dim_word,
-            momentum_switchover,lr,learning_rate_decay,snapshot_Freq,sample_Freq,val_Freq,use_dropout)
+            momentum_switchover,lr,learning_rate_decay,snapshot_Freq,sample_Freq,val_Freq,
+            use_dropout,L1_reg,L2_reg)
+            
+model.add(drop_out(use_dropout,0.25))
 model.add(BiDirectionGRU(n_u,n_h))
 model.add(drop_out(use_dropout))
-model.add(lstm(n_h,n_h))
+model.add(gru(n_h,n_h))
 model.add(drop_out(use_dropout))
-model.add(lstm(n_h,n_h))
+model.add(gru(n_h,n_h))
+model.add(drop_out(use_dropout))
+model.add(gru(n_h,n_h))
 model.build()
 
 
