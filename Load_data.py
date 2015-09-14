@@ -16,7 +16,7 @@ def load_dict(path):
     
 
 def load_data(path, n_words=100000, valid_portion=0.1, maxlen=None,
-              sort_by_len=False):
+              sort_by_len=True):
     '''Loads the dataset
 
     :type path: String

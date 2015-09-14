@@ -4,6 +4,7 @@ import numpy as np
 from initializations import glorot_uniform,zero,alloc_zeros_matrix,glorot_normal,numpy_floatX
 import theano.typed_list
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
+from activations import relu,LeakyReLU,tanh,sigmoid,linear
 
 SEED = 321
 np.random.seed(SEED)
@@ -18,6 +19,43 @@ def dropout_layer(state_before, use_noise, trng,pr=0.5):
                          state_before * pr)
     return proj
 
+class Embedding(object):
+    def __init__(self,n_in,n_hidden):
+        self.n_in=int(n_in)
+        self.n_hidden=int(n_hidden)
+        self.input= T.tensor3()
+        self.x_mask=T.matrix()
+        
+        
+        self.W=glorot_normal((n_in,n_hidden))
+
+        
+        self.params=[self.W]
+        
+        self.L1 = T.sum(abs(self.W))
+        self.L2_sqr = T.sum(self.W**2)
+
+    def set_previous(self,layer):
+        self.previous = layer
+        self.input=self.get_input()
+        self.x_mask=self.previous.x_mask
+    
+    def set_input(self,x):
+        self.input=x
+
+    def set_mask(self,x_mask):
+        self.x_mask=x_mask
+        
+    def get_input(self,train=False):
+        if hasattr(self, 'previous'):
+            return self.previous.get_output(train)
+        else:
+            return self.input    
+    
+    def get_output(self,train=False):
+        X=self.get_input(train)
+        out = self.W[X]
+        return out    
 
 class drop_out(object):
     def __init__(self,use_dropout,pr=0.5):
@@ -56,15 +94,54 @@ class drop_out(object):
         self.input=self.get_input(train) 
         
         return dropout_layer(self.input, self.use_noise, self.trng,self.pr)
-   
 
-class hidden(object):
-    def __init__(self,n_in,n_hidden):
+class FC_layer(object):
+    def __init__(self,n_in,n_hidden,activation='tanh'):
         self.n_in=int(n_in)
         self.n_hidden=int(n_hidden)
         self.input= T.tensor3()
         self.x_mask=T.matrix()
+        self.activation=eval(activation)
         
+        
+        self.W=glorot_uniform((n_in,n_hidden))
+        self.b=zero((n_hidden,))
+
+        
+        self.params=[self.W,self.b]
+        
+        self.L1 = T.sum(abs(self.W))+T.sum(abs(self.b))
+        self.L2_sqr = T.sum(self.W**2)+T.sum(self.b**2)
+
+    def set_previous(self,layer):
+        self.previous = layer
+        self.input=self.get_input()
+        self.x_mask=self.previous.x_mask
+    
+    def set_input(self,x):
+        self.input=x
+
+    def set_mask(self,x_mask):
+        self.x_mask=x_mask
+        
+    def get_input(self,train=False):
+        if hasattr(self, 'previous'):
+            return self.previous.get_output(train)
+        else:
+            return self.input    
+    
+    def get_output(self,train=False):
+        X=self.get_input(train)
+        output = T.tanh(T.dot(X, self.W) + self.b)
+        return out     
+
+class hidden(object):
+    def __init__(self,n_in,n_hidden,activation='tanh'):
+        self.n_in=int(n_in)
+        self.n_hidden=int(n_hidden)
+        self.input= T.tensor3()
+        self.x_mask=T.matrix()
+        self.activation=eval(activation)        
         
         self.W_hh=glorot_uniform((n_hidden,n_hidden))
         self.W_in=glorot_uniform((n_in,n_hidden))
@@ -112,11 +189,12 @@ class hidden(object):
 
 
 class lstm(object):
-    def __init__(self,n_in,n_hidden):
+    def __init__(self,n_in,n_hidden,activation='tanh'):
         self.n_in=int(n_in)
         self.n_hidden=int(n_hidden)
         self.input= T.tensor3()
         self.x_mask=T.matrix()
+        self.activation=eval(activation)        
         
         self.W_i = glorot_uniform((n_in,n_hidden))
         self.U_i = glorot_uniform((n_hidden,n_hidden))
@@ -195,11 +273,12 @@ class lstm(object):
         return h
 
 class gru(object):
-    def __init__(self,n_in,n_hidden):
+    def __init__(self,n_in,n_hidden,activation='tanh'):
         self.n_in=int(n_in)
         self.n_hidden=int(n_hidden)
         self.input= T.tensor3()
         self.x_mask=T.matrix()
+        self.activation=eval(activation)
         
         self.W_z = glorot_uniform((n_in,n_hidden))
         self.U_z = glorot_uniform((n_hidden,n_hidden))
@@ -268,13 +347,14 @@ class gru(object):
 
 
 class BiDirectionLSTM(object):
-    def __init__(self,n_in,n_hidden,output_mode='concat'):
+    def __init__(self,n_in,n_hidden,activation='tanh',output_mode='concat'):
         self.n_in=int(n_in)
         if output_mode is 'concat': n_hidden=int(n_hidden/2)
         self.n_hidden=int(n_hidden)
         self.output_mode = output_mode
         self.input= T.tensor3()
         self.x_mask=T.matrix()
+        self.activation=eval(activation)
         
         # forward weights
         self.W_i = glorot_uniform((n_in,n_hidden))
@@ -423,13 +503,14 @@ class BiDirectionLSTM(object):
 
 
 class BiDirectionGRU(object):
-    def __init__(self,n_in,n_hidden,output_mode='concat'):
+    def __init__(self,n_in,n_hidden,activation='tanh',output_mode='concat'):
         self.n_in=int(n_in)
         if output_mode is 'concat':n_hidden=int(n_hidden/2)
         self.n_hidden=int(n_hidden)
         self.output_mode = output_mode
         self.input= T.tensor3()
         self.x_mask=T.matrix()
+        self.activation=eval(activation)
         
         # forward weights
         self.W_z = glorot_uniform((n_in,n_hidden))
@@ -555,14 +636,14 @@ class BiDirectionGRU(object):
             raise Exception('output mode is not sum or concat')
 
 class decoder(object):
-    def __init__(self,n_in,n_hidden,n_out):
+    def __init__(self,n_in,n_hidden,n_out,activation='tanh'):
         self.n_in=int(n_in)
         self.n_hidden=int(n_hidden)
         self.n_out=int(n_out)
         self.input= T.tensor3()
         self.output= T.tensor3()
         self.x_mask=T.matrix()
-        #self.y_mask=T.matrix()
+        self.activation=eval(activation)
 
         
         self.W_z = glorot_normal((n_out,n_hidden))

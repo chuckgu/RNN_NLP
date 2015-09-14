@@ -409,7 +409,7 @@ class RNN(object):
                 self.set_train(False)
                 val_losses = compute_val_error(val_set_x,mask_val_set_x,val_set_y)
                 self.val_errors.append(val_losses)
-                print ('>> Validation loss: %f'%val_losses)
+                print ('                         >>> Validation loss: %f'%val_losses)
                 self.set_train(True)
             
             if optimizer is 'SGD':
