@@ -5,7 +5,7 @@ from Layers import Drop_out,Embedding,FC_layer,Pool,Activation
 from Recurrent_Layers import Hidden,LSTM,GRU,BiDirectionLSTM,Decoder,BiDirectionGRU
 from Model import RNN
 from Load_data import load_data,prepare_full_data,prepare_full_data_keras
-from utils import Progbar
+from Utils import Progbar
 from sklearn.metrics import accuracy_score
 
 

@@ -1,10 +1,10 @@
 import theano
 import theano.tensor as T
 import numpy as np
-from initializations import glorot_uniform,zero,alloc_zeros_matrix,glorot_normal,numpy_floatX,orthogonal,one,uniform
+from Initializations import glorot_uniform,zero,alloc_zeros_matrix,glorot_normal,numpy_floatX,orthogonal,one,uniform
 import theano.typed_list
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
-from activations import relu,LeakyReLU,tanh,sigmoid,linear,mean,max,softmax,hard_sigmoid
+from Activations import relu,LeakyReLU,tanh,sigmoid,linear,mean,max,softmax,hard_sigmoid
 
 
 def dropout_layer(state_before, use_noise, trng=RandomStreams(seed=np.random.randint(10e6)),pr=0.5):
