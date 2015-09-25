@@ -19,7 +19,7 @@ np.random.seed(SEED)
 
 logger = logging.getLogger(__name__)
 
-mode = theano.Mode(linker='cvm') #the runtime algo to execute the code is in c
+mode = theano.Mode(linker='cvm', optimizer='fast_run') #the runtime algo to execute the code is in c
 
 
 def numpy_floatX(data):
@@ -279,7 +279,7 @@ class ENC_DEC(object):
         self.p_y_given_x = T.reshape(y_p_s, y_p.shape)
                 
         
-        self.loss = lambda y,y_mask: Loss.nll_multiclass(self.p_y_given_x,y,y_mask)
+        self.loss = lambda y,y_mask: Loss.nll_multiclass_3d(self.p_y_given_x,y,y_mask)
         
 
     def train(self,X_train,X_mask,Y_train,Y_mask,worddict,verbose,optimizer):

@@ -15,8 +15,8 @@ def load_dict(path):
     
     
 
-def load_data(path, n_words=100000, valid_portion=0.1, maxlen=None,
-              sort_by_len=True):
+def load_data(path, n_words=100000, valid_portion=0.1, maxlen=None,max_lable=None,
+              sort_by_len=False):
     '''Loads the dataset
 
     :type path: String
@@ -56,8 +56,13 @@ def load_data(path, n_words=100000, valid_portion=0.1, maxlen=None,
         new_train_set_y = []
         for x, y in zip(train_set[0], train_set[1]):
             if len(x) < maxlen:
-                new_train_set_x.append(x)
-                new_train_set_y.append(y)
+                if max_lable is None:
+                    new_train_set_x.append(x)
+                    new_train_set_y.append(y)
+                else:
+                    if y<max_lable:
+                        new_train_set_x.append(x)
+                        new_train_set_y.append(y)
         train_set = (new_train_set_x, new_train_set_y)
         del new_train_set_x, new_train_set_y
 
@@ -186,11 +191,64 @@ def prepare_full_data(seqs, labels, maxlen=None):
 
     n_samples = len(seqs)
     if maxlen is None:maxlen = np.max(lengths)
+        
+    maxlen=maxlen+1
 
     x = np.zeros((maxlen, n_samples)).astype('int64')
     x_mask = np.zeros((maxlen, n_samples)).astype(theano.config.floatX)
+    #x = np.zeros((n_samples,maxlen)).astype('int64')
+    #x_mask = np.zeros((n_samples,maxlen)).astype(theano.config.floatX)
     for idx, s in enumerate(seqs):
         x[:lengths[idx], idx] = s
-        x_mask[:lengths[idx], idx] = 1.
+        x_mask[:lengths[idx]+1, idx] = 1.
+        #x[idx,:lengths[idx]] = s
+        #x_mask[idx,:lengths[idx]+1] = 1.
+    return x, x_mask, labels
 
+def prepare_full_data_keras(seqs, labels, maxlen=None):
+    """Create the matrices from the datasets.
+
+    This pad each sequence to the same lenght: the lenght of the
+    longuest sequence or maxlen.
+
+    if maxlen is set, we will cut all sequence to this maximum
+    lenght.
+
+    This swap the axis!
+    """
+    # x: a list of sentences
+    lengths = [len(s) for s in seqs]
+    print 'max length of sentences: %i'%max(lengths)
+    print 'mean length of sentences: %i'%np.mean(lengths)
+    print '50 percentile of sentences: %i'%np.percentile(lengths,50)
+    print '75 percentile of sentences: %i'%np.percentile(lengths,75)
+    if maxlen is not None:
+        new_seqs = []
+        new_labels = []
+        new_lengths = []
+        for l, s, y in zip(lengths, seqs, labels):
+            if l > maxlen:
+                l=maxlen
+                s=s[:maxlen]
+            new_seqs.append(s)
+            new_labels.append(y)
+            new_lengths.append(l)
+        lengths = new_lengths
+        labels = new_labels
+        seqs = new_seqs
+
+        if len(lengths) < 1:
+            return None, None, None
+
+    n_samples = len(seqs)
+    if maxlen is None:maxlen = np.max(lengths)
+        
+    maxlen=maxlen+1
+
+
+    x = np.zeros((n_samples,maxlen)).astype('int64')
+    x_mask = np.zeros((n_samples,maxlen)).astype(theano.config.floatX)
+    for idx, s in enumerate(seqs):
+        x[idx,:lengths[idx]] = s
+        x_mask[idx,:lengths[idx]+1] = 1.
     return x, x_mask, labels

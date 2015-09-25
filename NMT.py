@@ -2,7 +2,7 @@ import theano.tensor as T
 import theano,os
 import numpy as np
 import matplotlib.pyplot as plt
-from Layers import hidden,lstm,gru,BiDirectionLSTM,decoder,BiDirectionGRU
+from Layers import hidden,lstm,gru,BiDirectionLSTM,decoder,BiDirectionGRU,drop_out,Embedding,FC_layer,Pool
 from Model_NMT import ENC_DEC
 from Load_data import prepare_data,load_data,load_dict
 
@@ -50,6 +50,10 @@ dic_file='data/subscript.dict.pkl'
 train, valid, test = load_data(load_file,n_words=n_words_x, valid_portion=0.00,
                                maxlen=n_maxlen)
 
+print 'number of training data: %i'%len(train[0])
+print 'number of validation data: %i'%len(valid[0])
+
+#print '<training data>' 
 seq,seq_mask,targets,targets_mask=prepare_data(train[0],train[1],n_maxlen)
 
 targets[:,:-1]=targets[:,1:]
@@ -97,7 +101,8 @@ elif mode=='te':
     if os.path.isfile(filepath): model.load(filepath)
     else: 
         raise IOError('loading error...')
-
+        
+'''
     i=20
     for j in range(i):
         k=np.random.randint(1,n_sentence)
@@ -126,7 +131,7 @@ def sampling(i,model,input,output,seq,seq_mask,targets,stochastic,n_gen_maxlen,n
     print 'Sample: ',' '.join(output.sequences_to_text(estimate))
     
     return prob,estimate 
-
+'''
 
 
     

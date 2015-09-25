@@ -1,10 +1,10 @@
-import theano.tensor as T
-import theano,os
 import numpy as np
 import matplotlib.pyplot as plt
-from Layers import hidden,lstm,gru,BiDirectionLSTM,decoder,BiDirectionGRU,drop_out,Embedding,FC_layer
-from Model_RNN import RNN
-from Load_data import load_data,prepare_full_data
+import os
+from Layers import Drop_out,Embedding,FC_layer,Pool,Activation
+from Recurrent_Layers import Hidden,LSTM,GRU,BiDirectionLSTM,Decoder,BiDirectionGRU
+from Model import RNN
+from Load_data import load_data,prepare_full_data,prepare_full_data_keras
 from utils import Progbar
 from sklearn.metrics import accuracy_score
 
@@ -13,31 +13,30 @@ from sklearn.metrics import accuracy_score
 
 #theano.config.optimizer='None' 
 
-
-
-n_epochs = 500
-lr=0.0005
+n_epochs = 100
+lr=0.001
 momentum_switchover=5
 learning_rate_decay=0.999
 optimizer="Adam"
+loss='nll_multiclass'
 
 #RMSprop,SGD,Adagrad,Adadelta,Adam
 
-snapshot_Freq=20
-sample_Freq=15
-val_Freq=2
+snapshot_Freq=200
+sample_Freq=150
+val_Freq=1
 
 
 n_sentence=100000
 n_batch=128 
-n_chapter=None ## unit of slicing corpus
-n_maxlen=400 ##max length of sentences in tokenizing
-n_gen_maxlen=400 ## max length of generated sentences
+train_shared=False## sharing all data on GPU
+n_maxlen=30 ##max length of sentences in tokenizing
+n_gen_maxlen=200 ## max length of generated sentences
 n_words=100000 ## max number of words in dictionary
-dim_word=1000  ## dimention of word embedding 
+dim_word=1024# dimention of word embedding 
 
 n_u = dim_word
-n_h = 1000 ## number of hidden nodes in encoder
+n_h = 1024 ## number of hidden nodes in encoder
 
 
 stochastic=False
@@ -45,36 +44,44 @@ use_dropout=True
 verbose=1
 
 L1_reg=0
-L2_reg=0.001
+L2_reg=0
 
 print 'Loading data...'
 
-load_file='data/imdb_count.pkl'
+load_file='data/imdb_sen_count.pkl'
 
 train, valid, test = load_data(load_file,n_words=n_words, valid_portion=0.01,
-                               maxlen=None)
-n_y = np.max((np.max(train[1]),np.max(valid[1]),np.max(test[1]))) + 1
+                               maxlen=n_maxlen,max_lable=50)
+'''
+train_x=train[0]     
+train_y=train[1] 
+
+train_x=train_x[:10000]
+train_y=train_y[:10000]
+
+train=(train_x,train_y)
+'''                          
+                               
+n_y = np.max((np.max(train[1]),np.max(valid[1]))) + 1
 
 print 'number of classes: %i'%n_y
 print 'number of training data: %i'%len(train[0])
-print 'number of training data: %i'%len(valid[0])
+print 'number of validation data: %i'%len(valid[0])
 
 ####build model
 print 'Initializing model...'
 
 mode='tr'
 
-model = RNN(n_u,n_h,n_y,n_epochs,n_chapter,n_batch,n_gen_maxlen,n_words,dim_word,
-            momentum_switchover,lr,learning_rate_decay,snapshot_Freq,sample_Freq,val_Freq,
-            use_dropout,L1_reg,L2_reg)
-#model.add(Embedding(n_words,dim_word))            
-model.add(drop_out(use_dropout,0.25))
-model.add(BiDirectionLSTM(n_u,n_h))
-model.add(drop_out(use_dropout))
-model.add(lstm(n_h,n_h))
-model.add(drop_out(use_dropout))
-model.add(lstm(n_h,n_h))
-model.build()
+model = RNN(n_epochs=n_epochs,n_batch=n_batch,snapshot=snapshot_Freq,
+            sample_Freq=sample_Freq,val_Freq=val_Freq,L1_reg=L1_reg,L2_reg=L2_reg)
+model.add(Embedding(n_words,dim_word))            
+#model.add(drop_out(use_dropout,0.25))
+model.add(LSTM(n_u,n_h,return_seq=False))
+model.add(Drop_out())
+model.add(FC_layer(n_h,n_y))
+model.add(Activation('softmax'))
+model.compile(optimizer=optimizer,loss=loss)
 
 
 
@@ -86,9 +93,8 @@ if mode=='tr':
     seq,seq_mask,targets=prepare_full_data(train[0],train[1],n_maxlen)
     print '<validation data>'
     val,val_mask,val_targets=prepare_full_data(valid[0],valid[1],n_maxlen)
-    
-    
-    model.train(seq,seq_mask,targets,val,val_mask,val_targets,verbose,optimizer)
+
+    model.train(seq,seq_mask,targets,val,val_mask,val_targets,verbose)
     model.save(filepath)
     
     ##draw error graph 
