@@ -3,7 +3,7 @@ import numpy as np
 import time
 import sys
 import six
-import theano.tensor as tensor
+import theano.tensor as T
 
 
 def get_from_module(identifier, module_params, module_name, instantiate=False, kwargs=None):
@@ -45,6 +45,13 @@ def printv(v, prefix=''):
         prefix += '...'
         print(prefix + str(v))
 
+
+def seq_to_text(seq,worddict):
+    text=[]    
+    for s in seq:
+        if s==0:break
+        text.append(worddict.keys()[worddict.values().index(s)])
+    return ' '.join(text)
 
 class Progbar(object):
     def __init__(self, target, width=30, verbose=1):
@@ -130,10 +137,7 @@ class Progbar(object):
     def add(self, n, values=[]):
         self.update(self.seen_so_far+n, values)
 
-def relu(x):
-    return tensor.maximum(0., x)
 
-        
 def concatenate(tensor_list, axis=0):
     """
     Alternative implementation of `theano.tensor.concatenate`.
@@ -163,7 +167,7 @@ def concatenate(tensor_list, axis=0):
     for k in range(axis + 1, tensor_list[0].ndim):
         output_shape += (tensor_list[0].shape[k],)
 
-    out = tensor.zeros(output_shape)
+    out = T.zeros(output_shape)
     offset = 0
     for tt in tensor_list:
         indices = ()
@@ -173,7 +177,36 @@ def concatenate(tensor_list, axis=0):
         for k in range(axis + 1, tensor_list[0].ndim):
             indices += (slice(None),)
 
-        out = tensor.set_subtensor(out[indices], tt)
+        out = T.set_subtensor(out[indices], tt)
         offset += tt.shape[axis]
 
     return out
+
+
+def ndim_tensor(ndim,dtype):
+    if ndim == 2:
+        return T.matrix(dtype=dtype)
+    elif ndim == 3:
+        return T.tensor3(dtype=dtype)
+    elif ndim == 4:
+        return T.tensor4(dtype=dtype)
+    return T.matrix(dtype=dtype)
+
+def make_batches(size, batch_size):
+    nb_batch = int(np.ceil(size/float(batch_size)))
+    return [(i*batch_size, min(size, (i+1)*batch_size)) for i in range(0, nb_batch)]
+    
+def slice_X(X, start=None, stop=None):
+    if type(X) == list:
+        if hasattr(start, '__len__'):
+            return [x[start] if x.ndim==1 else x[:,start] for x in X ]
+        else:
+            return [x[start:stop] if x.ndim==1 else x[:,start:stop] for x in X]
+    else:
+        if hasattr(start, '__len__'):
+            if X.ndim==1:return X[start]
+            else: return X[:,start]
+        else:
+            if X.ndim==1:return X[start:stop]
+            else: X[:,start:stop]
+

@@ -7,15 +7,15 @@ from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 from Activations import relu,LeakyReLU,tanh,sigmoid,linear,mean,max,softmax,hard_sigmoid
 
 
-def dropout_layer(state_before, use_noise, trng=RandomStreams(seed=np.random.randint(10e6)),pr=0.5):
-    pr=1. - pr
-    proj = T.switch(use_noise,
-                         (state_before *
-                          trng.binomial(state_before.shape,
-                                        p=pr, n=1,
-                                        dtype=state_before.dtype)),
-                         state_before * pr)
-    return proj
+def dropout_layer(X, train, trng=RandomStreams(seed=np.random.randint(10e6)),pr=0.5):
+    if pr > 0.:
+        retain_prob = 1. - pr
+        if train:
+            X *= trng.binomial(X.shape, p=retain_prob, dtype=theano.config.floatX)
+        else:
+            X *= retain_prob
+    return X                
+
 
 class Layer(object):
     
@@ -27,6 +27,8 @@ class Layer(object):
     def set_input(self,x):
         self.input=x
 
+    def get_mask(self):
+        return self.x_mask
             
     def set_mask(self,x_mask):
         self.x_mask=x_mask
@@ -37,26 +39,27 @@ class Layer(object):
         else:
             return self.input    
 
+            
+            
+class Embedding(Layer):
+    def __init__(self,n_in,n_hidden,mask_zero=True):
+        self.n_in=int(n_in)
+        self.n_hidden=int(n_hidden)
+        self.input= T.imatrix()
+        self.x_mask=T.imatrix()
+        self.mask_zero=mask_zero
+        self.W=uniform((n_in,n_hidden))    
+        self.params=[self.W]
+        self.L1 = 0
+        self.L2_sqr = 0
+    '''
     def get_output_mask(self, train=None):
         X = self.get_input(train)
         if not self.mask_zero:
             return None
         else:
             return T.ones_like(X) * (1 - T.eq(X, 0))
-            
-            
-class Embedding(Layer):
-    def __init__(self,n_in,n_hidden):
-        self.n_in=int(n_in)
-        self.n_hidden=int(n_hidden)
-        self.input= T.imatrix()
-        self.x_mask=T.matrix()
-        self.W=uniform((n_in,n_hidden))    
-        self.params=[self.W]
-        self.L1 = 0
-        self.L2_sqr = 0
-
-
+    '''
     def get_output(self, train=False):
         X = self.get_input(train)
         out = self.W[X]

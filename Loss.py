@@ -49,7 +49,7 @@ def nll_binary(p_y_given_x, y):
     # negative log likelihood here is cross entropy
     return T.mean(T.nnet.binary_crossentropy(p_y_given_x, y))
     
-def nll_multiclass_3d(p_y_given_x, y,y_mask):
+def nll_multiclass_3d(y,y_mask,p_y_given_x):
         # negative log likelihood based on multiclass cross entropy error
         #
         # Theano's advanced indexing is limited

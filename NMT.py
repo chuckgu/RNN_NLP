@@ -2,28 +2,27 @@ import theano.tensor as T
 import theano,os
 import numpy as np
 import matplotlib.pyplot as plt
-from Layers import hidden,lstm,gru,BiDirectionLSTM,decoder,BiDirectionGRU,drop_out,Embedding,FC_layer,Pool
-from Model_NMT import ENC_DEC
+from Layers import Drop_out,Embedding,FC_layer,Pool,Activation
+from Recurrent_Layers import Hidden,LSTM,GRU,BiDirectionLSTM,Decoder,BiDirectionGRU
+from Model_ENC_DEC import ENC_DEC
 from Load_data import prepare_data,load_data,load_dict
 
 #theano.config.exception_verbosity='high'
 
-#theano.config.optimizer='None' 
+theano.config.optimizer='None' 
 
 
-n_epochs = 50
-lr=0.001
-momentum_switchover=5
-learning_rate_decay=0.999
+n_epochs = 100
+
 optimizer="Adam" #RMSprop,SGD,Adagrad,Adadelta,Adam
+loss='nll_multiclass'
 
 snapshot_Freq=20
-sample_Freq=5
-val_Freq=50
+sample_Freq=2
+val_Freq=1
 
 n_sentence=9000
 n_batch=128 
-n_chapter=None ## unit of slicing corpus
 n_maxlen=20 ##max length of sentences in tokenizing
 n_gen_maxlen=20 ## max length of generated sentences
 n_words_x=10000 ## max numbers of words in dictionary
@@ -31,13 +30,13 @@ n_words_y=10000 ## max numbers of words in dictionary
 dim_word=1000  ## dimention of word embedding 
 
 n_u = dim_word
-n_h = 1000 ## number of hidden nodes in encoder
+n_h = 1024 ## number of hidden nodes in encoder
 
-n_d = 1000 ## number of hidden nodes in decoder
+n_d = 1024 ## number of hidden nodes in decoder
 n_y = dim_word
 
 stochastic=False
-use_dropout=True
+shared_emb=True
 verbose=1
 
 ####Load data
@@ -47,7 +46,7 @@ print 'Loading data...'
 load_file='data/subscript.pkl'
 dic_file='data/subscript.dict.pkl'
 
-train, valid, test = load_data(load_file,n_words=n_words_x, valid_portion=0.00,
+train, valid, test = load_data(load_file,n_words=n_words_x, valid_portion=0.02,
                                maxlen=n_maxlen)
 
 print 'number of training data: %i'%len(train[0])
@@ -56,9 +55,15 @@ print 'number of validation data: %i'%len(valid[0])
 #print '<training data>' 
 seq,seq_mask,targets,targets_mask=prepare_data(train[0],train[1],n_maxlen)
 
+val,val_mask,val_targets,val_targets_mask=prepare_data(valid[0],valid[1],n_maxlen)
+
 targets[:,:-1]=targets[:,1:]
 
 targets_mask[:,:-1]=targets_mask[:,1:]
+
+val_targets[:,:-1]=val_targets[:,1:]
+
+val_targets_mask[:,:-1]=val_targets_mask[:,1:]
 
 worddict = dict()
 
@@ -70,11 +75,11 @@ print 'Initializing model...'
 
 mode='tr'
 
-model = ENC_DEC(n_u,n_h,n_d,n_y,n_epochs,n_chapter,n_batch,n_gen_maxlen,n_words_x,n_words_y,dim_word,
-            momentum_switchover,lr,learning_rate_decay,snapshot_Freq,sample_Freq,val_Freq,use_dropout)
-model.add(BiDirectionGRU(n_u,n_h))
-model.add(decoder(n_h,n_d,n_y))
-model.build()
+model = ENC_DEC(n_u,n_h,n_d,n_y,n_epochs,n_batch,n_gen_maxlen,n_words_x,n_words_y,dim_word,
+                snapshot_Freq,sample_Freq,val_Freq,shared_emb)
+model.add(LSTM(n_u,n_h))
+model.add(Decoder(n_h,n_d,n_y))
+model.compile()
 
 
 
@@ -83,8 +88,10 @@ filepath='save/sub.pkl'
 if mode=='tr':
     if os.path.isfile(filepath): model.load(filepath)
     
+    train_set=[seq,seq_mask,targets,targets_mask]
+    val_set=[val,val_mask,val_targets,val_targets_mask]
     
-    model.train(seq,seq_mask,targets,targets_mask,worddict,verbose,optimizer)
+    model.train(train_set,val_set,worddict,verbose)
     model.save(filepath)
     
     ##draw error graph 

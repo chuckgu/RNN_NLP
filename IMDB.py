@@ -29,7 +29,6 @@ val_Freq=1
 
 n_sentence=100000
 n_batch=128 
-train_shared=False## sharing all data on GPU
 n_maxlen=30 ##max length of sentences in tokenizing
 n_gen_maxlen=200 ## max length of generated sentences
 n_words=100000 ## max number of words in dictionary

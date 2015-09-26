@@ -8,42 +8,14 @@ import cPickle as pickle
 from Optimizers import SGD,RMSprop,Adagrad,Adadelta,Adam
 from Loss import nll_multiclass,categorical_crossentropy
 import Callbacks as cbks
-from Utils import Progbar
+from Utils import Progbar,ndim_tensor,make_batches,slice_X
 
 mode = theano.Mode(linker='cvm', optimizer='fast_run') #the runtime algo to execute the code is in c
 
-def ndim_tensor(ndim,dtype):
-    if ndim == 2:
-        return T.matrix(dtype=dtype)
-    elif ndim == 3:
-        return T.tensor3(dtype=dtype)
-    elif ndim == 4:
-        return T.tensor4(dtype=dtype)
-    return T.matrix(dtype=dtype)
-
-def make_batches(size, batch_size):
-    nb_batch = int(np.ceil(size/float(batch_size)))
-    return [(i*batch_size, min(size, (i+1)*batch_size)) for i in range(0, nb_batch)]
-    
-def slice_X(X, start=None, stop=None):
-    if type(X) == list:
-        if hasattr(start, '__len__'):
-            return [x[start] if x.ndim==1 else x[:,start] for x in X ]
-        else:
-            return [x[start:stop] if x.ndim==1 else x[:,start:stop] for x in X]
-    else:
-        if hasattr(start, '__len__'):
-            if X.ndim==1:return X[start]
-            else: return X[:,start]
-        else:
-            if X.ndim==1:return X[start:stop]
-            else: X[:,start:stop]
 
 
 
-
-class RNN(object):
-    
+class RNN(object):   
     def __init__(self,n_epochs=100,n_batch=16,snapshot=100,sample_Freq=100,val_Freq=100,L1_reg=0,L2_reg=0):
                 
         self.n_batch=int(n_batch)
@@ -166,15 +138,26 @@ class RNN(object):
         if not hasattr(self.layers[0], 'input'):
             self.set_input()
         return self.layers[0].get_input(train)  
+    
+    def set_mask(self):
+        ndim = self.layers[0].ndim
+        self.layers[0].x_mask = ndim_tensor(ndim,'float32')
+      
+    def get_mask(self):
+        if not hasattr(self.layers[0], 'x_mask'):
+            self.set_mask()
+        return self.layers[0].get_mask()
         
-       
 
         
     def compile(self,optimizer='Adam',loss='nll_multiclass'):      
 
         # input of model
         self.X_train = self.get_input(train=True)
+        self.X_train_mask = self.get_mask()
+        
         self.X_test = self.get_input(train=False)
+        self.X_test_mask = self.get_mask()
 
         self.y_train = self.get_output(train=True)
         self.y_test = self.get_output(train=False)
@@ -184,13 +167,13 @@ class RNN(object):
         #self.y = T.zeros_like(self.y_train)
 
         if type(self.X_train) == list:
-            train_ins = self.X_train + [self.y]
-            test_ins = self.X_test + [self.y]
-            predict_ins = self.X_test
+            train_ins = self.X_train + self.X_train_mask+[self.y]
+            test_ins = self.X_test + self.X_test_mask + [self.y]
+            predict_ins = self.X_test + self.X_test_mask
         else:
-            train_ins = [self.X_train, self.y]
-            test_ins = [self.X_test, self.y]
-            predict_ins = [self.X_test]
+            train_ins = [self.X_train, self.X_train_mask, self.y]
+            test_ins = [self.X_test, self.X_test_mask, self.y]
+            predict_ins = [self.X_test, self.X_test_mask]
  
         ### cost and updates    
  
@@ -222,12 +205,14 @@ class RNN(object):
                                       outputs = [cost,train_accuracy],
                                       updates = updates,
                                       mode = mode,
-                                      allow_input_downcast=True,on_unused_input='ignore')
+                                      allow_input_downcast=True,
+                                      on_unused_input='ignore')
 
         self._test_with_acc = theano.function(inputs = test_ins,
                                               outputs = [test_loss,test_accuracy],
                                               mode = mode,
-                                              allow_input_downcast=True,on_unused_input='ignore') 
+                                              allow_input_downcast=True,
+                                              on_unused_input='ignore') 
         
         self._predict = theano.function(inputs = predict_ins,
                                              outputs = self.y_test,
@@ -236,7 +221,7 @@ class RNN(object):
 
     
 
-    def train(self,X_train,X_mask,Y_train,X_val,X_val_mask,Y_val,verbose=1,shuffle=True):
+    def train(self,X_train,X_mask,Y_train,X_val,X_val_mask,Y_val,verbose=1,shuffle=True, show_accuracy=True):
         
         ### input data        
     
@@ -244,13 +229,13 @@ class RNN(object):
         train_set_y = np.asarray(Y_train, dtype='int32')
         mask_set_x = np.asarray(X_mask, dtype='float32')
         
-        ins = [train_set_x,train_set_y]
+        ins = [train_set_x, mask_set_x, train_set_y]
 
         val_set_x = np.asarray(X_val, dtype='int32')
         val_set_y = np.asarray(Y_val, dtype='int32')   
         mask_val_set_x = np.asarray(X_val_mask, dtype='float32')             
         
-        val_ins = [val_set_x,val_set_y]
+        val_ins = [val_set_x, mask_val_set_x, val_set_y]
           
         ###############
         # TRAIN MODEL #
@@ -267,9 +252,15 @@ class RNN(object):
 
         callbacks = cbks.CallbackList(callbacks)
         
-        metrics = ['loss', 'acc', 'val_loss', 'val_acc']
-        
-        out_labels = ['loss', 'acc']
+
+        if show_accuracy:
+            f = self._train_with_acc
+            out_labels = ['loss', 'acc']
+            metrics = ['loss', 'acc', 'val_loss', 'val_acc']
+        else:
+            f = self._train
+            out_labels = ['loss']
+            metrics = ['loss', 'val_loss']        
         
         do_validation = True
 
@@ -310,7 +301,7 @@ class RNN(object):
                 batch_logs['size'] = len(batch_ids)
                 callbacks.on_batch_begin(batch_index, batch_logs)
                         
-                cost = self._train_with_acc(*ins_batch)                    
+                cost = f(*ins_batch)                    
                  
                 if np.isnan(cost[0]) or np.isinf(cost[0]):
                     raise ValueError('NaN detected')
@@ -344,44 +335,31 @@ class RNN(object):
                 if epoch is not self.n_epochs: self.save()
 
 
-             
-            ### generating sample.. 
-            if np.mod(epoch+1,self.sample_Freq)==0:
-
-                print 'Generating a sample...'               
-                
-                i=np.random.randint(1,nb_train_sample)
-                
-                test=np.asarray(X_train[:,i]).astype('int32')
-                
-                test=test.reshape((test.shape[0],1))
-                
-                #mask=np.asarray(X_mask[:,i]).astype('float32')
-                
-                #mask=mask.reshape((mask.shape[0],1))
-
-                truth=[Y_train[i]]                
-                
-                test_ins=[test,truth]
-                
-                guess =self._test_loop(self._predict,test_ins)
-                
-                #print 'Input: %i'%test
-    
-                print 'Truth: %i'%truth
-                
-                print 'Sample: %i'%np.argmax(guess, axis=-1)
-                
-
-
         callbacks.on_train_end()   
 
+
+    def evaluate(self, X_test,X_mask,Y_test, batch_size=128, show_accuracy=False, verbose=1):
+        
+        test_set_x = np.asarray(X_test, dtype='int32')
+        test_set_y = np.asarray(Y_test, dtype='int32')
+        mask_set_x = np.asarray(X_mask, dtype='float32')
+        
+        ins = [test_set_x, mask_set_x, test_set_y]
+        if show_accuracy:
+            f = self._test_with_acc
+        else:
+            f = self._test
+        outs = self._test_loop(f, ins, batch_size, verbose)
+        if show_accuracy:
+            return outs
+        else:
+            return outs[0]
 
     def _predict_loop(self, f, ins, batch_size=128, verbose=0):
         '''
             Abstract method to loop over some data in batches.
         '''
-        nb_sample = len(ins[0])
+        nb_sample = ins[0].shape[1]
         outs = []
         if verbose == 1:
             progbar = Progbar(target=nb_sample)
@@ -409,7 +387,7 @@ class RNN(object):
         '''
             Abstract method to loop over some data in batches.
         '''
-        nb_sample = len(ins[0])
+        nb_sample = ins[0].shape[1]
         outs = []
         if verbose == 1:
             progbar = Progbar(target=nb_sample)

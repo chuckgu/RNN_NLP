@@ -7,14 +7,14 @@ from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 from Activations import relu,LeakyReLU,tanh,sigmoid,linear,mean,max,softmax,hard_sigmoid
 
 class Recurrent(object):
+    '''
     def get_input_mask(self, train=False):
         if hasattr(self, 'previous'):
-            #return self.previous.get_output_mask(train)
-            return None
+            return self.previous.get_output_mask(train)
         else:
             return None
 
-    def get_output_mask(self, train=None):
+    def get_output_mask(self, train=False):
         if self.return_sequences:
             return super(Recurrent, self).get_output_mask(train)
         else:
@@ -35,7 +35,7 @@ class Recurrent(object):
             padding = alloc_zeros_matrix(pad, mask.shape[1], 1)
             mask = T.concatenate([padding, mask], axis=0)
         return mask.astype('int8')
-
+'''
     def set_previous(self,layer):
         self.previous = layer
         self.input=self.get_input()
@@ -43,7 +43,10 @@ class Recurrent(object):
         
     def set_input(self,x):
         self.input=x
-
+        
+    def get_mask(self):
+        return self.x_mask
+            
     def set_mask(self,x_mask):
         self.x_mask=x_mask
         
@@ -122,7 +125,6 @@ class LSTM(Recurrent):
         ]
         
         self.L1 = 0
-        
         self.L2_sqr = 0
         
         
@@ -130,22 +132,26 @@ class LSTM(Recurrent):
               xi_t, xf_t, xo_t, xc_t, mask_tm1,
               h_tm1, c_tm1,
               u_i, u_f, u_o, u_c):
-        h_mask_tm1 = mask_tm1 * h_tm1
-        c_mask_tm1 = mask_tm1 * c_tm1
+        #h_mask_tm1 = mask_tm1 * h_tm1
+        #c_mask_tm1 = mask_tm1 * c_tm1
 
-        i_t = hard_sigmoid(xi_t + T.dot(h_mask_tm1, u_i))
-        f_t = hard_sigmoid(xf_t + T.dot(h_mask_tm1, u_f))
-        c_t = f_t * c_mask_tm1 + i_t * self.activation(xc_t + T.dot(h_mask_tm1, u_c))
-        o_t = hard_sigmoid(xo_t + T.dot(h_mask_tm1, u_o))
+        i_t = hard_sigmoid(xi_t + T.dot(h_tm1, u_i))
+        f_t = hard_sigmoid(xf_t + T.dot(h_tm1, u_f))
+        c_t = f_t * c_tm1 + i_t * self.activation(xc_t + T.dot(h_tm1, u_c))
+        c_t = mask_tm1 * c_t + (1. - mask_tm1) * c_tm1        
+        
+        o_t = hard_sigmoid(xo_t + T.dot(h_tm1, u_o))
         h_t = o_t * self.activation(c_t)
+        h_t = mask_tm1 * h_t + (1. - mask_tm1) * h_tm1
+        
         return h_t, c_t
 
     
     def get_output(self,train=False):
         X = self.get_input(train)
-        #padded_mask = self.x_mask[:,:,None]
-        padded_mask = self.get_padded_shuffled_mask(train, X, pad=1)
-       # X = X.dimshuffle((1, 0, 2))
+        padded_mask = self.get_mask()[:,:, None].astype('int8')
+        #padded_mask = self.get_padded_shuffled_mask(train, X, pad=0)
+
         
         xi = T.dot(X, self.W_i) + self.b_i
         xf = T.dot(X, self.W_f) + self.b_f
@@ -478,7 +484,7 @@ class BiDirectionGRU(Recurrent):
         else:
             raise Exception('output mode is not sum or concat')
 
-class Decoder(object):
+class Decoder(Recurrent):
     def __init__(self,n_in,n_hidden,n_out,activation='tanh'):
         self.n_in=int(n_in)
         self.n_hidden=int(n_hidden)
@@ -489,56 +495,44 @@ class Decoder(object):
         self.activation=eval(activation)
 
         
-        self.W_z = glorot_normal((n_out,n_hidden))
-        self.U_z = glorot_normal((n_hidden,n_hidden))
+        self.W_z = glorot_uniform((n_out,n_hidden))
+        self.U_z = orthogonal((n_hidden,n_hidden))
         self.b_z = zero((n_hidden,))
 
-        self.W_r = glorot_normal((n_out,n_hidden))
-        self.U_r = glorot_normal((n_hidden,n_hidden))
+        self.W_r = glorot_uniform((n_out,n_hidden))
+        self.U_r = orthogonal((n_hidden,n_hidden))
         self.b_r = zero((n_hidden,))
 
-        self.W_h = glorot_normal((n_out,n_hidden)) 
-        self.U_h = glorot_normal((n_hidden,n_hidden))
+        self.W_h = glorot_uniform((n_out,n_hidden)) 
+        self.U_h = orthogonal((n_hidden,n_hidden))
         self.b_h = zero((n_hidden,))
         
-        self.U_att= glorot_normal((self.n_in,1)) 
+        self.U_att= orthogonal((self.n_in,1)) 
         self.b_att= zero((1,))
 
-        self.W_yc=glorot_normal((self.n_out,))
+        self.W_yc=glorot_uniform((self.n_out,))
         
 
-        self.W_cy = glorot_normal((self.n_in,self.n_hidden))
-        self.W_cs= glorot_normal((self.n_in,self.n_hidden))
+        self.W_cy = glorot_uniform((self.n_in,self.n_hidden))
+        self.W_cs= glorot_uniform((self.n_in,self.n_hidden))
 
         
-        self.W_ha = glorot_normal((self.n_in,self.n_in))
-        self.W_sa= glorot_normal((self.n_hidden,self.n_in))
+        self.W_ha = glorot_uniform((self.n_in,self.n_in))
+        self.W_sa= glorot_uniform((self.n_hidden,self.n_in))
         
 
         
-        self.W_cl= glorot_normal((self.n_in,self.n_out))
-        self.W_yl= glorot_normal((self.n_out,self.n_out))
-        self.W_hl= glorot_normal((self.n_hidden,self.n_out))
+        self.W_cl= glorot_uniform((self.n_in,self.n_out))
+        self.W_yl= glorot_uniform((self.n_out,self.n_out))
+        self.W_hl= glorot_uniform((self.n_hidden,self.n_out))
         
         self.params=[self.W_z,self.U_z,self.b_z,self.W_r,self.U_r,self.b_r,
                    self.W_h,self.U_h,self.b_h,self.W_cy,self.W_cs,self.W_ha,self.W_sa
                      ,self.W_cl,self.W_yl,self.W_hl,self.U_att,self.b_att]
         
 
-        self.L1 = T.sum(abs(self.W_z))+T.sum(abs(self.U_z))+\
-                  T.sum(abs(self.W_r))+T.sum(abs(self.U_r))+\
-                  T.sum(abs(self.W_h))+T.sum(abs(self.U_h))+\
-                  T.sum(abs(self.W_cy))+T.sum(abs(self.W_cs))+\
-                  T.sum(abs(self.W_ha))+T.sum(abs(self.W_sa))+\
-                  T.sum(abs(self.W_cl))+T.sum(abs(self.W_yl))+\
-                  T.sum(abs(self.W_hl))+T.sum(abs(self.U_att))
-        self.L2_sqr = T.sum(self.W_z**2) + T.sum(self.U_z**2)+\
-                      T.sum(self.W_r**2) + T.sum(self.U_r**2)+\
-                      T.sum(self.W_h**2) + T.sum(self.U_h**2)+\
-                      T.sum(self.W_cy**2) + T.sum(self.W_cs**2)+\
-                      T.sum(self.W_ha**2) + T.sum(self.W_sa**2)+\
-                      T.sum(self.W_cl**2) + T.sum(self.W_yl**2)+\
-                      T.sum(self.W_hl**2) + T.sum(self.U_att**2)
+        self.L1 = 0
+        self.L2_sqr = 0
         
     def _step(self,y_tm1,y_m,s_tm1,h,x_m):
         
