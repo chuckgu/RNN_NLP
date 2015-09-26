@@ -13,8 +13,8 @@ from Layers import dropout_layer
 import Callbacks as cbks
 
 
-#mode = theano.Mode(linker='cvm', optimizer='fast_run') #the runtime algo to execute the code is in c
-mode=None
+mode = theano.Mode(linker='cvm', optimizer='fast_run') #the runtime algo to execute the code is in c
+
 class ENC_DEC(object):
     
     def __init__(self,n_in,n_hidden,n_decoder,n_out,

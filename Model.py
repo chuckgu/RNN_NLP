@@ -12,9 +12,6 @@ from Utils import Progbar,ndim_tensor,make_batches,slice_X
 
 mode = theano.Mode(linker='cvm', optimizer='fast_run') #the runtime algo to execute the code is in c
 
-
-
-
 class RNN(object):   
     def __init__(self,n_epochs=100,n_batch=16,snapshot=100,sample_Freq=100,val_Freq=100,L1_reg=0,L2_reg=0):
                 
