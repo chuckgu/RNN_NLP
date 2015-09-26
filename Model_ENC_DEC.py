@@ -397,8 +397,8 @@ class ENC_DEC(object):
                 rand=np.random.randint(1,nb_train_sample)
                 
                 test=train_set_x[:,rand][:,None]
-                mask=mask_set_x[:,rand]
-                truth=train_set_y[:,rand]  
+                mask=mask_set_x[:,rand][:,None]
+                truth=train_set_y[:,rand][:,None]  
                 
                 ins_gen=[test,mask,truth]
                 
