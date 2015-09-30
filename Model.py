@@ -56,10 +56,9 @@ class RNN(object):
         """ Return state sequence."""
         params = self.params  # parameters set in constructor
         weights = [p.get_value() for p in self.params]
-        lr=self.lr
         error=self.errors
         val_error=self.val_errors
-        state = (params, weights,lr,error,val_error)
+        state = (params, weights,error,val_error)
         return state
 
     def _set_weights(self, weights):
@@ -81,7 +80,6 @@ class RNN(object):
         #self.set_params(**params)
         #self.ready()
         self._set_weights(weights)
-        self.lr=lr
         self.errors=error
         self.val_errors=val_error
 
@@ -199,7 +197,7 @@ class RNN(object):
         
                           
         self._train_with_acc = theano.function(inputs = train_ins,
-                                      outputs = [cost,train_accuracy],
+                                      outputs = [train_loss,train_accuracy],
                                       updates = updates,
                                       mode = mode,
                                       allow_input_downcast=True,

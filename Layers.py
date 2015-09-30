@@ -42,29 +42,52 @@ class Layer(object):
             
             
 class Embedding(Layer):
-    def __init__(self,n_in,n_hidden,mask_zero=True):
+    def __init__(self,n_in,n_hidden,n_out=0,n_out_hidden=0,multi=False,shared_emb=True):
         self.n_in=int(n_in)
         self.n_hidden=int(n_hidden)
         self.input= T.imatrix()
         self.x_mask=T.imatrix()
-        self.mask_zero=mask_zero
-        self.W=uniform((n_in,n_hidden))    
-        self.params=[self.W]
+        self.multi=multi
+        self.W=uniform((n_in,n_hidden))
+        self.shared_emb=shared_emb
+        if multi:
+            self.y= T.imatrix()
+            self.y_mask=T.imatrix()
+                
+
+        if shared_emb:
+            self.params=[self.W]
+        else:
+            self.n_out=int(n_out)
+            self.n_out_hidden=int(n_out_hidden)            
+            self.W_multi=uniform((n_out,n_out_hidden))
+            self.params=[self.W,self.W_multi]
+        
         self.L1 = 0
         self.L2_sqr = 0
-    '''
-    def get_output_mask(self, train=None):
-        X = self.get_input(train)
-        if not self.mask_zero:
-            return None
-        else:
-            return T.ones_like(X) * (1 - T.eq(X, 0))
-    '''
+
     def get_output(self, train=False):
         X = self.get_input(train)
         out = self.W[X]
         return out
 
+    def set_input_y(self,y):
+        self.y=y
+
+    def get_input_y(self):
+        return self.y
+
+    def set_mask_y(self,y_mask):
+        self.y_mask=y_mask
+
+    def get_mask_y(self):
+        return self.y_mask
+
+    def get_multi_output(self):
+        y = self.y
+        if self.shared_emb: out = self.W[y]
+        else: out = self.W_multi[y]
+        return out
 
 
 class Activation(Layer):

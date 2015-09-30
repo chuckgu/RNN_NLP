@@ -4,7 +4,7 @@ import os
 from Layers import Drop_out,Embedding,FC_layer,Pool,Activation
 from Recurrent_Layers import Hidden,LSTM,GRU,BiDirectionLSTM,Decoder,BiDirectionGRU
 from Model import RNN
-from Load_data import load_data,prepare_full_data,prepare_full_data_keras
+from Load_data import load_data,prepare_full_data
 from Utils import Progbar
 from sklearn.metrics import accuracy_score
 
@@ -14,16 +14,12 @@ from sklearn.metrics import accuracy_score
 #theano.config.optimizer='None' 
 
 n_epochs = 100
-lr=0.001
-momentum_switchover=5
-learning_rate_decay=0.999
 optimizer="Adam"
 loss='nll_multiclass'
-
 #RMSprop,SGD,Adagrad,Adadelta,Adam
 
-snapshot_Freq=200
-sample_Freq=150
+snapshot_Freq=25
+sample_Freq=0
 val_Freq=1
 
 
@@ -49,8 +45,8 @@ print 'Loading data...'
 
 load_file='data/imdb_sen_count.pkl'
 
-train, valid, test = load_data(load_file,n_words=n_words, valid_portion=0.01,
-                               maxlen=n_maxlen,max_lable=50)
+train, valid, test = load_data(load_file,n_words=n_words, valid_portion=0.05,
+                               maxlen=n_maxlen,max_lable=None)
 '''
 train_x=train[0]     
 train_y=train[1] 
@@ -75,8 +71,8 @@ mode='tr'
 model = RNN(n_epochs=n_epochs,n_batch=n_batch,snapshot=snapshot_Freq,
             sample_Freq=sample_Freq,val_Freq=val_Freq,L1_reg=L1_reg,L2_reg=L2_reg)
 model.add(Embedding(n_words,dim_word))            
-#model.add(drop_out(use_dropout,0.25))
-model.add(LSTM(n_u,n_h,return_seq=False))
+model.add(Drop_out(0.25))
+model.add(BiDirectionGRU(n_u,n_h,return_seq=False))
 model.add(Drop_out())
 model.add(FC_layer(n_h,n_y))
 model.add(Activation('softmax'))

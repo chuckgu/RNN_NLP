@@ -7,35 +7,6 @@ from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 from Activations import relu,LeakyReLU,tanh,sigmoid,linear,mean,max,softmax,hard_sigmoid
 
 class Recurrent(object):
-    '''
-    def get_input_mask(self, train=False):
-        if hasattr(self, 'previous'):
-            return self.previous.get_output_mask(train)
-        else:
-            return None
-
-    def get_output_mask(self, train=False):
-        if self.return_sequences:
-            return super(Recurrent, self).get_output_mask(train)
-        else:
-            return None
-
-    def get_padded_shuffled_mask(self, train, X, pad=0):
-        mask = self.get_input_mask(train)
-        if mask is None:
-            mask = T.ones_like(X.sum(axis=-1))  # is there a better way to do this without a sum?
-
-        # mask is (nb_samples, time)
-        mask = T.shape_padright(mask)  # (nb_samples, time, 1)
-        mask = T.addbroadcast(mask, -1)  # (time, nb_samples, 1) matrix.
-        #mask = mask.dimshuffle(1, 0, 2)  # (time, nb_samples, 1)
-
-        if pad > 0:
-            # left-pad in time with 0
-            padding = alloc_zeros_matrix(pad, mask.shape[1], 1)
-            mask = T.concatenate([padding, mask], axis=0)
-        return mask.astype('int8')
-'''
     def set_previous(self,layer):
         self.previous = layer
         self.input=self.get_input()
@@ -170,12 +141,13 @@ class LSTM(Recurrent):
         return h
 
 class GRU(Recurrent):
-    def __init__(self,n_in,n_hidden,activation='tanh'):
+    def __init__(self,n_in,n_hidden,activation='tanh',return_seq=True):
         self.n_in=int(n_in)
         self.n_hidden=int(n_hidden)
         self.input= T.tensor3()
         self.x_mask=T.matrix()
         self.activation=eval(activation)
+        self.return_seq=return_seq
         
         self.W_z = glorot_uniform((n_in,n_hidden))
         self.U_z = glorot_uniform((n_hidden,n_hidden))
@@ -195,15 +167,40 @@ class GRU(Recurrent):
             self.W_h, self.U_h, self.b_h,
         ]
 
-        self.L1 = T.sum(abs(self.W_z))+T.sum(abs(self.U_z))+\
-                  T.sum(abs(self.W_r))+T.sum(abs(self.U_r))+\
-                  T.sum(abs(self.W_h))+T.sum(abs(self.U_h))
+        self.L1 = 0
+        self.L2_sqr = 0       
+
+    def _step(self,
+              xz_t, xr_t, xh_t, mask_tm1,
+              h_tm1,
+              u_z, u_r, u_h):
+        #h_mask_tm1 = mask_tm1 * h_tm1
+        z = hard_sigmoid(xz_t + T.dot(h_tm1, u_z))
+        r = hard_sigmoid(xr_t + T.dot(h_tm1, u_r))
+        hh_t = self.activation(xh_t + T.dot(r * h_tm1, u_h))
+        h_t = z * h_tm1 + (1 - z) * hh_t
+        h_t=mask_tm1 * h_t + (1. - mask_tm1) * h_tm1
+        return h_t
+
+    def get_output(self, train=False):
+        X = self.get_input(train)
+        padded_mask = self.get_mask()[:,:, None].astype('int8')
+        #padded_mask = self.get_padded_shuffled_mask(train, X, pad=1)
+        #X = X.dimshuffle((1, 0, 2))
+
+        x_z = T.dot(X, self.W_z) + self.b_z
+        x_r = T.dot(X, self.W_r) + self.b_r
+        x_h = T.dot(X, self.W_h) + self.b_h
+        h, c = theano.scan(
+            self._step,
+            sequences=[x_z, x_r, x_h, padded_mask],
+            outputs_info=T.unbroadcast(alloc_zeros_matrix(X.shape[1], self.n_hidden), 1),
+            non_sequences=[self.U_z, self.U_r, self.U_h])
+
+        if self.return_seq is False: return h[-1]
+        return h
         
-        self.L2_sqr = T.sum(self.W_z**2) + T.sum(self.U_z**2)+\
-                      T.sum(self.W_r**2) + T.sum(self.U_r**2)+\
-                      T.sum(self.W_h**2) + T.sum(self.U_h**2)        
-        
-    
+    '''
     def _step(self,x_t,x_m, h_tm1):
         
         z = hard_sigmoid(T.dot(x_t, self.W_z) + self.b_z + T.dot(h_tm1, self.U_z))
@@ -223,12 +220,12 @@ class GRU(Recurrent):
                                                                             self.n_hidden))
 
         return h
-
+        '''
 
 
 
 class BiDirectionLSTM(Recurrent):
-    def __init__(self,n_in,n_hidden,activation='tanh',output_mode='concat'):
+    def __init__(self,n_in,n_hidden,activation='tanh',output_mode='concat',return_seq=True):
         self.n_in=int(n_in)
         if output_mode is 'concat': n_hidden=int(n_hidden/2)
         self.n_hidden=int(n_hidden)
@@ -236,6 +233,7 @@ class BiDirectionLSTM(Recurrent):
         self.input= T.tensor3()
         self.x_mask=T.matrix()
         self.activation=eval(activation)
+        self.return_seq=return_seq
         
         # forward weights
         self.W_i = glorot_uniform((n_in,n_hidden))
@@ -283,29 +281,25 @@ class BiDirectionLSTM(Recurrent):
             self.Wb_o, self.Ub_o, self.bb_o,
         ]
 
-        self.L1 = T.sum(abs(self.W_i))+T.sum(abs(self.U_i))+\
-                  T.sum(abs(self.W_f))+T.sum(abs(self.U_f))+\
-                  T.sum(abs(self.W_c))+T.sum(abs(self.U_c))+\
-                  T.sum(abs(self.W_o))+T.sum(abs(self.U_o))+\
-                  T.sum(abs(self.Wb_i))+T.sum(abs(self.Ub_i))+\
-                  T.sum(abs(self.Wb_f))+T.sum(abs(self.Ub_f))+\
-                  T.sum(abs(self.Wb_c))+T.sum(abs(self.Ub_c))+\
-                  T.sum(abs(self.Wb_o))+T.sum(abs(self.Ub_o))
+        self.L1 = 0
+        self.L2_sqr = 0    
+    
+    
         
-        self.L2_sqr = T.sum(self.W_i**2) + T.sum(self.U_i**2)+\
-                      T.sum(self.W_f**2) + T.sum(self.U_f**2)+\
-                      T.sum(self.W_c**2) + T.sum(self.U_c**2)+\
-                      T.sum(self.W_o**2) + T.sum(self.U_o**2)+\
-                      T.sum(self.Wb_i**2) + T.sum(self.Ub_i**2)+\
-                      T.sum(self.Wb_f**2) + T.sum(self.Ub_f**2)+\
-                      T.sum(self.Wb_c**2) + T.sum(self.Ub_c**2)+\
-                      T.sum(self.Wb_o**2) + T.sum(self.Ub_o**2)
+    def _fstep(self,
+              xi_t, xf_t, xo_t, xc_t, mask_tm1,
+              h_tm1, c_tm1,
+              u_i, u_f, u_o, u_c): 
 
+        i_t = hard_sigmoid(xi_t + T.dot(h_tm1, u_i))
+        f_t = hard_sigmoid(xf_t + T.dot(h_tm1, u_f))
+        c_t = f_t * c_tm1 + i_t * self.activation(xc_t + T.dot(h_tm1, u_c))
+        c_t = mask_tm1 * c_t + (1. - mask_tm1) * c_tm1        
         
-    
-    
-        
-    def _fstep(self, x_t,x_m, h_tm1, c_tm1): 
+        o_t = hard_sigmoid(xo_t + T.dot(h_tm1, u_o))
+        h_t = o_t * self.activation(c_t)
+        h_t = mask_tm1 * h_t + (1. - mask_tm1) * h_tm1                  
+        '''          
         i_t = hard_sigmoid(T.dot(x_t, self.W_i) + self.b_i + T.dot(h_tm1, self.U_i))
         f_t = hard_sigmoid(T.dot(x_t, self.W_f) + self.b_f + T.dot(h_tm1, self.U_f))
         c_t = f_t * c_tm1 + i_t * self.activation(T.dot(x_t, self.W_c) + self.b_c + T.dot(h_tm1, self.U_c))
@@ -314,47 +308,69 @@ class BiDirectionLSTM(Recurrent):
         o_t = hard_sigmoid( T.dot(x_t, self.W_o) + self.b_o + T.dot(h_tm1, self.U_o))
         h_t = o_t * self.activation(c_t)
         h_t = x_m[:, None] * h_t + (1. - x_m)[:, None] * h_tm1
-        
+        '''
         return h_t, c_t
 
 
-    def _bstep(self, x_t,x_m, h_tm1, c_tm1): 
-        i_t = hard_sigmoid(T.dot(x_t, self.Wb_i) + self.bb_i + T.dot(h_tm1, self.Ub_i))
-        f_t = hard_sigmoid(T.dot(x_t, self.Wb_f) + self.bb_f + T.dot(h_tm1, self.Ub_f))
-        c_t = f_t * c_tm1 + i_t * self.activation(T.dot(x_t, self.Wb_c) + self.bb_c + T.dot(h_tm1, self.Ub_c))
-        c_t = x_m[:, None] * c_t + (1. - x_m)[:, None] * c_tm1            
+    def _bstep(self,
+              xi_t, xf_t, xo_t, xc_t, mask_tm1,
+              h_tm1, c_tm1,
+              u_i, u_f, u_o, u_c): 
+        i_t = hard_sigmoid(xi_t + T.dot(h_tm1, u_i))
+        f_t = hard_sigmoid(xf_t + T.dot(h_tm1, u_f))
+        c_t = f_t * c_tm1 + i_t * self.activation(xc_t + T.dot(h_tm1, u_c))
+        c_t = mask_tm1 * c_t + (1. - mask_tm1) * c_tm1        
         
-        o_t = hard_sigmoid( T.dot(x_t, self.Wb_o) + self.bb_o + T.dot(h_tm1, self.Ub_o))
+        o_t = hard_sigmoid(xo_t + T.dot(h_tm1, u_o))
         h_t = o_t * self.activation(c_t)
-        h_t = x_m[:, None] * h_t + (1. - x_m)[:, None] * h_tm1        
+        h_t = mask_tm1 * h_t + (1. - mask_tm1) * h_tm1             
         
         return h_t, c_t        
           
     
     def get_forward_output(self,train=False):
-        X=self.get_input(train)
-        X_mask=self.x_mask
-        [h,c], _ = theano.scan(self._fstep, 
-                             sequences = [X,X_mask],
-                             outputs_info = [alloc_zeros_matrix(self.input.shape[1],
-                                                                            self.n_hidden),
-                                             alloc_zeros_matrix(self.input.shape[1],
-                                                                            self.n_hidden)])
+        X = self.get_input(train)
+        padded_mask = self.get_mask()[:,:, None].astype('int8')
 
-        return h
         
-    def get_backward_output(self,train=False):
-        X=self.get_input(train)
-        X_mask=self.x_mask
-        [h,c], _ = theano.scan(self._bstep, 
-                             sequences = [X,X_mask],
-                             outputs_info = [alloc_zeros_matrix(self.input.shape[1],
-                                                                            self.n_hidden),
-                                             alloc_zeros_matrix(self.input.shape[1],
-                                                                            self.n_hidden)],
-                                            go_backwards = True)
+        xi = T.dot(X, self.W_i) + self.b_i
+        xf = T.dot(X, self.W_f) + self.b_f
+        xc = T.dot(X, self.W_c) + self.b_c
+        xo = T.dot(X, self.W_o) + self.b_o
 
-        return h  
+        [h, c], _ = theano.scan(self._fstep,
+                                sequences=[xi, xf, xo, xc, padded_mask],
+                                outputs_info=[
+                                    T.unbroadcast(alloc_zeros_matrix(X.shape[1], self.n_hidden), 1),
+                                    T.unbroadcast(alloc_zeros_matrix(X.shape[1], self.n_hidden), 1)
+                                ],
+                                non_sequences=[self.U_i, self.U_f, self.U_o, self.U_c])        
+
+        if self.return_seq is False: return h[-1]                                                                 
+        return h        
+
+    def get_backward_output(self,train=False):
+        X = self.get_input(train)
+        padded_mask = self.get_mask()[:,:, None].astype('int8')
+
+        
+        xi = T.dot(X, self.Wb_i) + self.bb_i
+        xf = T.dot(X, self.Wb_f) + self.bb_f
+        xc = T.dot(X, self.Wb_c) + self.bb_c
+        xo = T.dot(X, self.Wb_o) + self.bb_o
+
+        [h, c], _ = theano.scan(self._bstep,
+                                sequences=[xi, xf, xo, xc, padded_mask],
+                                outputs_info=[
+                                    T.unbroadcast(alloc_zeros_matrix(X.shape[1], self.n_hidden), 1),
+                                    T.unbroadcast(alloc_zeros_matrix(X.shape[1], self.n_hidden), 1)
+                                ],
+                                non_sequences=[self.Ub_i, self.Ub_f, self.Ub_o, self.Ub_c],
+                                go_backwards = True)        
+
+        if self.return_seq is False: return h[-1]                                                                 
+        return h               
+
 
 
     def get_output(self,train=False):
@@ -363,13 +379,15 @@ class BiDirectionLSTM(Recurrent):
         if self.output_mode is 'sum':
             return forward + backward
         elif self.output_mode is 'concat':
-            return T.concatenate([forward, backward], axis=2)
+            if self.return_seq: axis=2
+            else: axis=1
+            return T.concatenate([forward, backward], axis=axis)
         else:
             raise Exception('output mode is not sum or concat')
 
 
 class BiDirectionGRU(Recurrent):
-    def __init__(self,n_in,n_hidden,activation='tanh',output_mode='concat'):
+    def __init__(self,n_in,n_hidden,activation='tanh',output_mode='concat',return_seq=True):
         self.n_in=int(n_in)
         if output_mode is 'concat':n_hidden=int(n_hidden/2)
         self.n_hidden=int(n_hidden)
@@ -377,6 +395,7 @@ class BiDirectionGRU(Recurrent):
         self.input= T.tensor3()
         self.x_mask=T.matrix()
         self.activation=eval(activation)
+        self.return_seq=return_seq
         
         # forward weights
         self.W_z = glorot_uniform((n_in,n_hidden))
@@ -428,51 +447,68 @@ class BiDirectionGRU(Recurrent):
                       T.sum(self.Wb_r**2) + T.sum(self.Ub_r**2)+\
                       T.sum(self.Wb_h**2) + T.sum(self.Ub_h**2)
 
+    def _fstep(self,
+              xz_t, xr_t, xh_t, mask_tm1,
+              h_tm1,
+              u_z, u_r, u_h):
         
-        
-    def _fstep(self,x_t,x_m, h_tm1):
-        
-        z = hard_sigmoid(T.dot(x_t, self.W_z) + self.b_z + T.dot(h_tm1, self.U_z))
-        r = hard_sigmoid(T.dot(x_t, self.W_r) + self.b_r + T.dot(h_tm1, self.U_r))
-        hh_t = self.activation(T.dot(x_t, self.W_h) + self.b_h + T.dot(r * h_tm1, self.U_h))
+        z = hard_sigmoid(xz_t + T.dot(h_tm1, u_z))
+        r = hard_sigmoid(xr_t + T.dot(h_tm1, u_r))
+        hh_t = self.activation(xh_t + T.dot(r * h_tm1, u_h))
         h_t = z * h_tm1 + (1 - z) * hh_t
-        h_t=x_m[:,None] * h_t + (1. - x_m)[:,None] * h_tm1
-        
+        h_t=mask_tm1 * h_t + (1. - mask_tm1) * h_tm1
         return h_t
 
 
-    def _bstep(self,x_t,x_m, h_tm1):
+
+    def _bstep(self,
+              xz_t, xr_t, xh_t, mask_tm1,
+              h_tm1,
+              u_z, u_r, u_h):
         
-        z = hard_sigmoid(T.dot(x_t, self.Wb_z) + self.bb_z + T.dot(h_tm1, self.Ub_z))
-        r = hard_sigmoid(T.dot(x_t, self.Wb_r) + self.bb_r + T.dot(h_tm1, self.Ub_r))
-        hh_t = self.activation(T.dot(x_t, self.Wb_h) + self.bb_h + T.dot(r * h_tm1, self.Ub_h))
+        z = hard_sigmoid(xz_t + T.dot(h_tm1, u_z))
+        r = hard_sigmoid(xr_t + T.dot(h_tm1, u_r))
+        hh_t = self.activation(xh_t + T.dot(r * h_tm1, u_h))
         h_t = z * h_tm1 + (1 - z) * hh_t
-        h_t=x_m[:,None] * h_t + (1. - x_m)[:,None] * h_tm1
-        
-        return h_t  
+        h_t=mask_tm1 * h_t + (1. - mask_tm1) * h_tm1
+        return h_t
+ 
        
 
     def get_forward_output(self,train=False):
-        X=self.get_input(train)
-        mask_x=self.x_mask
-        h, _ = theano.scan(self._fstep, 
-                             sequences = [X,mask_x],
-                             outputs_info = alloc_zeros_matrix(self.input.shape[1],
-                                                                            self.n_hidden))
+        X = self.get_input(train)
+        padded_mask = self.get_mask()[:,:, None].astype('int8')
 
-        return h
+
+        x_z = T.dot(X, self.W_z) + self.b_z
+        x_r = T.dot(X, self.W_r) + self.b_r
+        x_h = T.dot(X, self.W_h) + self.b_h
+        h, c = theano.scan(
+            self._fstep,
+            sequences=[x_z, x_r, x_h, padded_mask],
+            outputs_info=T.unbroadcast(alloc_zeros_matrix(X.shape[1], self.n_hidden), 1),
+            non_sequences=[self.U_z, self.U_r, self.U_h])
+
+        if self.return_seq is False: return h[-1]
+        return h        
+        
         
     def get_backward_output(self,train=False):
-        X=self.get_input(train)
-        mask_x=self.x_mask
-        h, _ = theano.scan(self._bstep, 
-                             sequences = [X,mask_x],
-                             outputs_info = alloc_zeros_matrix(self.input.shape[1],
-                                                                            self.n_hidden),
-                                            go_backwards = True)
+        X = self.get_input(train)
+        padded_mask = self.get_mask()[:,:, None].astype('int8')
 
-        return h  
 
+        x_z = T.dot(X, self.Wb_z) + self.bb_z
+        x_r = T.dot(X, self.Wb_r) + self.bb_r
+        x_h = T.dot(X, self.Wb_h) + self.bb_h
+        h, c = theano.scan(
+            self._bstep,
+            sequences=[x_z, x_r, x_h, padded_mask],
+            outputs_info=T.unbroadcast(alloc_zeros_matrix(X.shape[1], self.n_hidden), 1),
+            non_sequences=[self.Ub_z, self.Ub_r, self.Ub_h],go_backwards = True)
+
+        if self.return_seq is False: return h[-1]
+        return h                
 
     def get_output(self,train=False):
         forward = self.get_forward_output(train)
@@ -480,7 +516,9 @@ class BiDirectionGRU(Recurrent):
         if self.output_mode is 'sum':
             return forward + backward
         elif self.output_mode is 'concat':
-            return T.concatenate([forward, backward], axis=2)
+            if self.return_seq: axis=2
+            else: axis=1
+            return T.concatenate([forward, backward], axis=axis)
         else:
             raise Exception('output mode is not sum or concat')
 

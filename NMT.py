@@ -77,6 +77,7 @@ mode='tr'
 
 model = ENC_DEC(n_u,n_h,n_d,n_y,n_epochs,n_batch,n_gen_maxlen,n_words_x,n_words_y,dim_word,
                 snapshot_Freq,sample_Freq,val_Freq,shared_emb)
+#model.add(Embedding(n_words_x,dim_word,True,shared_emb))
 model.add(LSTM(n_u,n_h))
 model.add(Decoder(n_h,n_d,n_y))
 model.compile()

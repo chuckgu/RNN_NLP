@@ -446,6 +446,7 @@ class ENC_DEC(object):
                         h) 
         
         h,logit=self.layers[-1].get_sample(y,h)
+        logit = dropout_layer(logit, False)
         y_gen = T.dot(logit, self.W_hy) + self.b_hy
             
         p_y_given_x_gen=T.nnet.softmax(y_gen)
