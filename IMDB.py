@@ -39,7 +39,7 @@ use_dropout=True
 verbose=1
 
 L1_reg=0
-L2_reg=0
+L2_reg=0.001
 
 print 'Loading data...'
 
@@ -72,7 +72,9 @@ model = RNN(n_epochs=n_epochs,n_batch=n_batch,snapshot=snapshot_Freq,
             sample_Freq=sample_Freq,val_Freq=val_Freq,L1_reg=L1_reg,L2_reg=L2_reg)
 model.add(Embedding(n_words,dim_word))            
 model.add(Drop_out(0.25))
-model.add(BiDirectionGRU(n_u,n_h,return_seq=False))
+model.add(GRU(n_u,n_h))
+model.add(Drop_out())
+model.add(Pool('mean'))
 model.add(Drop_out())
 model.add(FC_layer(n_h,n_y))
 model.add(Activation('softmax'))

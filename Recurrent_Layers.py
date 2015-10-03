@@ -103,8 +103,6 @@ class LSTM(Recurrent):
               xi_t, xf_t, xo_t, xc_t, mask_tm1,
               h_tm1, c_tm1,
               u_i, u_f, u_o, u_c):
-        #h_mask_tm1 = mask_tm1 * h_tm1
-        #c_mask_tm1 = mask_tm1 * c_tm1
 
         i_t = hard_sigmoid(xi_t + T.dot(h_tm1, u_i))
         f_t = hard_sigmoid(xf_t + T.dot(h_tm1, u_f))
@@ -121,9 +119,7 @@ class LSTM(Recurrent):
     def get_output(self,train=False):
         X = self.get_input(train)
         padded_mask = self.get_mask()[:,:, None].astype('int8')
-        #padded_mask = self.get_padded_shuffled_mask(train, X, pad=0)
 
-        
         xi = T.dot(X, self.W_i) + self.b_i
         xf = T.dot(X, self.W_f) + self.b_f
         xc = T.dot(X, self.W_c) + self.b_c
@@ -168,13 +164,14 @@ class GRU(Recurrent):
         ]
 
         self.L1 = 0
-        self.L2_sqr = 0       
+        self.L2_sqr = T.sum(self.W_z**2) + T.sum(self.U_z**2)+\
+                      T.sum(self.W_r**2) + T.sum(self.U_r**2)+\
+                      T.sum(self.W_h**2) + T.sum(self.U_h**2)         
 
     def _step(self,
               xz_t, xr_t, xh_t, mask_tm1,
               h_tm1,
               u_z, u_r, u_h):
-        #h_mask_tm1 = mask_tm1 * h_tm1
         z = hard_sigmoid(xz_t + T.dot(h_tm1, u_z))
         r = hard_sigmoid(xr_t + T.dot(h_tm1, u_r))
         hh_t = self.activation(xh_t + T.dot(r * h_tm1, u_h))
@@ -185,8 +182,6 @@ class GRU(Recurrent):
     def get_output(self, train=False):
         X = self.get_input(train)
         padded_mask = self.get_mask()[:,:, None].astype('int8')
-        #padded_mask = self.get_padded_shuffled_mask(train, X, pad=1)
-        #X = X.dimshuffle((1, 0, 2))
 
         x_z = T.dot(X, self.W_z) + self.b_z
         x_r = T.dot(X, self.W_r) + self.b_r
@@ -200,27 +195,6 @@ class GRU(Recurrent):
         if self.return_seq is False: return h[-1]
         return h
         
-    '''
-    def _step(self,x_t,x_m, h_tm1):
-        
-        z = hard_sigmoid(T.dot(x_t, self.W_z) + self.b_z + T.dot(h_tm1, self.U_z))
-        r = hard_sigmoid(T.dot(x_t, self.W_r) + self.b_r + T.dot(h_tm1, self.U_r))
-        hh_t = self.activation(T.dot(x_t, self.W_h) + self.b_h + T.dot(r * h_tm1, self.U_h))
-        h_t = z * h_tm1 + (1 - z) * hh_t
-        h_t=x_m[:,None] * h_t + (1. - x_m)[:,None] * h_tm1
-        
-        return h_t
-
-    def get_output(self,train=False):
-        X=self.get_input(train)
-        X_mask=self.x_mask
-        h, _ = theano.scan(self._step, 
-                             sequences = [X,X_mask],
-                             outputs_info = alloc_zeros_matrix(self.input.shape[1],
-                                                                            self.n_hidden))
-
-        return h
-        '''
 
 
 
@@ -299,16 +273,7 @@ class BiDirectionLSTM(Recurrent):
         o_t = hard_sigmoid(xo_t + T.dot(h_tm1, u_o))
         h_t = o_t * self.activation(c_t)
         h_t = mask_tm1 * h_t + (1. - mask_tm1) * h_tm1                  
-        '''          
-        i_t = hard_sigmoid(T.dot(x_t, self.W_i) + self.b_i + T.dot(h_tm1, self.U_i))
-        f_t = hard_sigmoid(T.dot(x_t, self.W_f) + self.b_f + T.dot(h_tm1, self.U_f))
-        c_t = f_t * c_tm1 + i_t * self.activation(T.dot(x_t, self.W_c) + self.b_c + T.dot(h_tm1, self.U_c))
-        c_t = x_m[:, None] * c_t + (1. - x_m)[:, None] * c_tm1        
-        
-        o_t = hard_sigmoid( T.dot(x_t, self.W_o) + self.b_o + T.dot(h_tm1, self.U_o))
-        h_t = o_t * self.activation(c_t)
-        h_t = x_m[:, None] * h_t + (1. - x_m)[:, None] * h_tm1
-        '''
+
         return h_t, c_t
 
 
