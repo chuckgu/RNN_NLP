@@ -1,11 +1,11 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import os
-from Layers import Drop_out,Embedding,FC_layer,Pool,Activation
-from Recurrent_Layers import Hidden,LSTM,GRU,BiDirectionLSTM,Decoder,BiDirectionGRU
-from Model import RNN
-from Load_data import load_data,prepare_full_data
-from Utils import Progbar
+from lib.Layers import Drop_out,Embedding,FC_layer,Pool,Activation
+from lib.Recurrent_Layers import Hidden,LSTM,GRU,BiDirectionLSTM,Decoder,BiDirectionGRU
+from lib.Model import NN_Model
+from lib.Load_data import load_data,prepare_full_data_keras
+from lib.Utils import Progbar
 from sklearn.metrics import accuracy_score
 
 
@@ -68,7 +68,7 @@ print 'Initializing model...'
 
 mode='tr'
 
-model = RNN(n_epochs=n_epochs,n_batch=n_batch,snapshot=snapshot_Freq,
+model = NN_Model(n_epochs=n_epochs,n_batch=n_batch,snapshot=snapshot_Freq,
             sample_Freq=sample_Freq,val_Freq=val_Freq,L1_reg=L1_reg,L2_reg=L2_reg)
 model.add(Embedding(n_words,dim_word))            
 model.add(Drop_out(0.25))
@@ -87,9 +87,9 @@ filepath='save/review3.pkl'
 if mode=='tr':
     if os.path.isfile(filepath): model.load(filepath)
     print '<training data>'    
-    seq,seq_mask,targets=prepare_full_data(train[0],train[1],n_maxlen)
+    seq,seq_mask,targets=prepare_full_data_keras(train[0],train[1],n_maxlen)
     print '<validation data>'
-    val,val_mask,val_targets=prepare_full_data(valid[0],valid[1],n_maxlen)
+    val,val_mask,val_targets=prepare_full_data_keras(valid[0],valid[1],n_maxlen)
 
     model.train(seq,seq_mask,targets,val,val_mask,val_targets,verbose)
     model.save(filepath)
@@ -109,7 +109,7 @@ elif mode=='te':
     else: 
         raise IOError('loading error...')
 
-    tes,tes_mask,tes_targets=prepare_full_data(test[0],test[1],n_maxlen)
+    tes,tes_mask,tes_targets=prepare_full_data_keras(test[0],test[1],n_maxlen)
     
     tes=np.asarray(tes,'int32')
     tes_mask=np.asarray(tes_mask,'float32')
